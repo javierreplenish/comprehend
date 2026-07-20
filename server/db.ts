@@ -198,3 +198,13 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+// ── Migrations for databases created before these columns existed ──
+// CREATE TABLE IF NOT EXISTS never alters existing tables, so additive
+// changes go here. Safe to run on every boot.
+const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+if (!userColumns.some((c) => c.name === "lifetime_uploads")) {
+  db.exec("ALTER TABLE users ADD COLUMN lifetime_uploads INTEGER NOT NULL DEFAULT 0");
+  // Existing users start with their current book count - deleting never refunds.
+  db.exec("UPDATE users SET lifetime_uploads = (SELECT COUNT(*) FROM books WHERE books.uploaded_by_user_id = users.id)");
+}
