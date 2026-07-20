@@ -18,6 +18,7 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 const app = express();
+app.set("trust proxy", 1);
 
 app.use(cors({
   origin: process.env.NODE_ENV === "production" ? true : (process.env.CLIENT_ORIGIN ?? "http://localhost:5173"),
