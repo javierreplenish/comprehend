@@ -8,7 +8,7 @@ import { db } from "./db";
 import { getDueTopics, respondToTurn, startSession } from "./sessions";
 import { seedTestContent } from "./seed";
 import { synthesizeTopicsForChapter } from "./topics";
-import { extractUploadedFile } from "./upload";
+import { extractUploadedFile, parseFlashcardSpreadsheet } from "./upload";
 import { getBookProcessingStatus, resumeInterruptedJobs, startImageProcessingJob, startProcessingJob } from "./processing";
 import { bridgeEligibility, respondToBridge, startBridge } from "./bridges";
 import multer from "multer";
@@ -143,7 +143,20 @@ app.get("/api/books", requireAuth, (req, res) => {
     ).get(req.session.userId, book.id) as { total: number; mastered: number } | undefined;
     return { ...book, totalTopics: stats?.total ?? 0, masteredTopics: stats?.mastered ?? 0 };
   });
-  res.json({ books: enriched });
+  const me = db.prepare("SELECT lifetime_uploads FROM users WHERE id = ?").get(req.session.userId) as { lifetime_uploads: number };
+  res.json({ books: enriched, uploadsUsed: me.lifetime_uploads });
+});
+
+// Delete a book and everything under it. Deliberately does NOT decrement
+// lifetime_uploads: the free allowance is spent on upload, not on possession.
+app.delete("/api/books/:bookId", requireAuth, (req, res) => {
+  const book = db.prepare("SELECT id, uploaded_by_user_id FROM books WHERE id = ?").get(Number(req.params.bookId)) as { id: number; uploaded_by_user_id: number } | undefined;
+  if (!book || book.uploaded_by_user_id !== req.session.userId) {
+    res.status(404).json({ error: "Book not found." });
+    return;
+  }
+  db.prepare("DELETE FROM books WHERE id = ?").run(book.id);
+  res.json({ ok: true });
 });
 
 // Dev-only: populates the real 31-chapter, 1,480-flashcard deck so the
@@ -165,15 +178,36 @@ app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req,
       return;
     }
 
-    // Enforce the free-tier book limit server-side - the Library UI hides the
-    // upload button, but the API must be the real gate.
-    const uploader = db.prepare("SELECT email, plan FROM users WHERE id = ?").get(req.session.userId) as { email: string; plan: string };
-    if (effectivePlan(uploader) !== "pro") {
-      const bookCount = (db.prepare("SELECT COUNT(*) as n FROM books WHERE uploaded_by_user_id = ?").get(req.session.userId) as { n: number }).n;
-      if (bookCount >= 1) {
-        res.status(403).json({ error: "Your free book is in your library. Upgrade to Pro for unlimited books." });
-        return;
-      }
+    // The wall counts LIFETIME uploads, not current library size - deleting a
+    // book tidies the library but never refunds the free upload.
+    const uploader = db.prepare("SELECT email, plan, lifetime_uploads FROM users WHERE id = ?").get(req.session.userId) as { email: string; plan: string; lifetime_uploads: number };
+    if (effectivePlan(uploader) !== "pro" && uploader.lifetime_uploads >= 1) {
+      res.status(403).json({ error: "Your free upload has been used. Upgrade to Pro for unlimited books." });
+      return;
+    }
+
+    // Flashcard spreadsheets import directly - no AI, no job, instant book.
+    const first = files[0];
+    const isSpreadsheet = files.length === 1 && (/\.(xlsx|xls|csv)$/i.test(first.originalname) || first.mimetype.includes("spreadsheet") || first.mimetype === "text/csv");
+    if (isSpreadsheet) {
+      const parsed = parseFlashcardSpreadsheet(first.buffer, first.originalname);
+      const insertBook = db.prepare("INSERT INTO books (title, author, status, uploaded_by_user_id) VALUES (?, NULL, 'ready', ?)");
+      const insertChapter = db.prepare("INSERT INTO chapters (book_id, number, title, summary, order_index) VALUES (?, ?, ?, ?, ?)");
+      const insertConcept = db.prepare("INSERT INTO concepts (chapter_id, label, question, source_locator, source_passage, order_index) VALUES (?, ?, ?, ?, ?, ?)");
+      const bookId = db.transaction(() => {
+        const id = insertBook.run(parsed.title, req.session.userId).lastInsertRowid as number;
+        parsed.chapters.forEach((ch, ci) => {
+          const chapterId = insertChapter.run(id, ci + 1, ch.title, `${ch.cards.length} concept${ch.cards.length === 1 ? "" : "s"}`, ci).lastInsertRowid as number;
+          ch.cards.forEach((card, i) => {
+            const label = card.question.length > 80 ? card.question.slice(0, 77) + "..." : card.question;
+            insertConcept.run(chapterId, label, card.question, "imported flashcard", card.answer, i);
+          });
+        });
+        return id;
+      })();
+      db.prepare("UPDATE users SET lifetime_uploads = lifetime_uploads + 1 WHERE id = ?").run(req.session.userId);
+      res.status(201).json({ bookId, jobId: 0, chunksTotal: 0 });
+      return;
     }
 
     const isImage = (f: Express.Multer.File) => f.mimetype.startsWith("image/");
@@ -185,6 +219,7 @@ app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req,
     if (images.length > 0 && docs.length === 0) {
       const label = images.length === 1 ? images[0].originalname.replace(/\.[^.]+$/, "") : `Screenshots (${images.length} pages)`;
       const job = startImageProcessingJob(req.session.userId!, images.map((f) => ({ buffer: f.buffer, mimetype: f.mimetype })), label);
+      db.prepare("UPDATE users SET lifetime_uploads = lifetime_uploads + 1 WHERE id = ?").run(req.session.userId);
       res.status(202).json(job);
       return;
     }
@@ -215,6 +250,7 @@ app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req,
     // job and return immediately - the client polls /api/books/:id/status
     // and the Library shows a live progress bar.
     const job = startProcessingJob(req.session.userId!, text, file.originalname);
+    db.prepare("UPDATE users SET lifetime_uploads = lifetime_uploads + 1 WHERE id = ?").run(req.session.userId);
     res.status(202).json(job);
   } catch (error) {
     console.error(error);

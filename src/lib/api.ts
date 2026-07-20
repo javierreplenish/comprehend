@@ -94,10 +94,15 @@ async function parseOrThrow(res: Response) {
   return body;
 }
 
-export async function fetchBooks(): Promise<BookSummary[]> {
+export async function fetchBooks(): Promise<{ books: BookSummary[]; uploadsUsed: number }> {
   const res = await fetch("/api/books", { credentials: "include" });
   const body = await parseOrThrow(res);
-  return body.books;
+  return { books: body.books, uploadsUsed: body.uploadsUsed ?? body.books.length };
+}
+
+export async function deleteBook(bookId: number): Promise<void> {
+  const res = await fetch(`/api/books/${bookId}`, { method: "DELETE", credentials: "include" });
+  await parseOrThrow(res);
 }
 
 export async function seedSampleBook(): Promise<{ bookId: number }> {

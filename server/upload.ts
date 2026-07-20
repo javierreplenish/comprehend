@@ -112,3 +112,56 @@ export async function extractUploadedFile(buffer: Buffer, mimetype: string, file
   }
   throw new Error(`Unsupported file type (${mimetype}). Upload a PDF, EPUB, DOCX, or plain text file.`);
 }
+
+
+// ── Flashcard spreadsheet import (.xlsx / .csv) ──
+// A sheet of ready-made Q&A cards (from any tool) maps straight into the
+// concepts table - no AI call, no cost, instant.
+import * as XLSX from "xlsx";
+
+export interface ImportedFlashcards {
+  title: string;
+  chapters: Array<{ title: string; cards: Array<{ question: string; answer: string }> }>;
+}
+
+export function parseFlashcardSpreadsheet(buffer: Buffer, filename: string): ImportedFlashcards {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) throw new Error("The spreadsheet has no sheets.");
+  const rows = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: "" }) as any[][];
+  if (rows.length === 0) throw new Error("The spreadsheet is empty.");
+
+  const headers = rows[0].map((h) => String(h ?? "").trim().toLowerCase());
+  const findCol = (patterns: RegExp) => headers.findIndex((h) => patterns.test(h));
+  let qCol = findCol(/question|front|prompt|term|card/);
+  let aCol = findCol(/answer|back|definition|response|explanation/);
+  const chCol = findCol(/chapter|section|unit|lesson|topic|category/);
+  let dataRows = rows.slice(1);
+
+  if (qCol === -1 || aCol === -1) {
+    if ((rows[0]?.length ?? 0) >= 2) {
+      qCol = 0;
+      aCol = 1;
+      dataRows = rows;
+    } else {
+      throw new Error("Couldn't find question/answer columns. Use headers like 'Question' and 'Answer' (a 'Chapter' column is optional).");
+    }
+  }
+
+  const byChapter = new Map<string, Array<{ question: string; answer: string }>>();
+  for (const row of dataRows) {
+    const question = String(row[qCol] ?? "").trim();
+    const answer = String(row[aCol] ?? "").trim();
+    if (!question || !answer) continue;
+    const chapter = chCol >= 0 && String(row[chCol] ?? "").trim() ? String(row[chCol]).trim() : "Flashcards";
+    if (!byChapter.has(chapter)) byChapter.set(chapter, []);
+    byChapter.get(chapter)!.push({ question, answer });
+  }
+
+  const chapters = [...byChapter.entries()].map(([title, cards]) => ({ title, cards }));
+  const total = chapters.reduce((n, ch) => n + ch.cards.length, 0);
+  if (total === 0) throw new Error("No usable question/answer rows found in the spreadsheet.");
+  if (total > 5000) throw new Error("That's over 5,000 cards - split the sheet into smaller uploads.");
+
+  return { title: filename.replace(/\.(xlsx|xls|csv)$/i, ""), chapters };
+}

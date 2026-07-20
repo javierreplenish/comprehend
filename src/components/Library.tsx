@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchBooks, fetchBookStatus, uploadBook, createCheckoutSession, type BookProcessingStatus, type BookSummary } from "../lib/api";
+import { deleteBook, fetchBooks, fetchBookStatus, uploadBook, createCheckoutSession, type BookProcessingStatus, type BookSummary } from "../lib/api";
 
 function formatEta(seconds: number | null): string {
   if (seconds === null) return "";
@@ -21,13 +21,40 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
   const [processing, setProcessing] = useState<Record<number, BookProcessingStatus>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [uploadsUsed, setUploadsUsed] = useState(0);
+
   const load = () => {
     setLoading(true);
     fetchBooks()
-      .then(setBooks)
+      .then(({ books, uploadsUsed }) => {
+        setBooks(books);
+        setUploadsUsed(uploadsUsed);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load your library."))
       .finally(() => setLoading(false));
   };
+
+  const handleDelete = async (e: React.MouseEvent, book: BookSummary) => {
+    e.stopPropagation();
+    if (!window.confirm(`Remove "${book.title}"? This deletes its flashcards and your progress in it. Your upload allowance is not restored.`)) return;
+    try {
+      await deleteBook(book.id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove the book.");
+    }
+  };
+
+  const removeControl = (book: BookSummary) => (
+    <span
+      role="button"
+      aria-label={`Remove ${book.title}`}
+      onClick={(e) => handleDelete(e, book)}
+      style={{ color: "var(--muted)", fontSize: "0.85rem", lineHeight: 1, padding: "2px 4px", cursor: "pointer", flexShrink: 0 }}
+    >
+      ✕
+    </span>
+  );
 
   useEffect(load, []);
 
@@ -76,10 +103,10 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
       <h1 style={{ fontSize: "1.05rem", margin: "0 0 0.75rem" }}>Your library</h1>
 
       <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", padding: "1.25rem", marginBottom: "1rem" }}>
-        {books.length >= 1 && userPlan !== "pro" ? (
+        {uploadsUsed >= 1 && userPlan !== "pro" ? (
           <>
             <p style={{ margin: 0, fontSize: "0.88rem", textAlign: "center", fontWeight: 600 }}>You've reached the free limit</p>
-            <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", textAlign: "center" }}>Your free book is in your library below. Upgrade for unlimited books of any length.</p>
+            <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", textAlign: "center" }}>Your free upload has been used. Upgrade for unlimited books of any length.</p>
             <button type="button" className="btn btn--primary btn--large" onClick={async () => {
               try {
                 const { url } = await createCheckoutSession();
@@ -92,8 +119,8 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
         ) : (
           <>
             <p style={{ margin: 0, fontSize: "0.88rem", textAlign: "center" }}>Upload a book, article, or textbook to start studying</p>
-            <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--muted)", textAlign: "center" }}>PDF, EPUB, DOCX, plain text — or up to 20 screenshots of pages</p>
-            <input ref={fileInputRef} type="file" accept=".pdf,.epub,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,text/plain,application/pdf,application/epub+zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" multiple onChange={handleFileSelected} style={{ display: "none" }} />
+            <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--muted)", textAlign: "center" }}>PDF, EPUB, DOCX, text, flashcard spreadsheets (XLSX/CSV) — or up to 20 screenshots</p>
+            <input ref={fileInputRef} type="file" accept=".pdf,.epub,.docx,.txt,.md,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp,.gif,text/plain,application/pdf,application/epub+zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" multiple onChange={handleFileSelected} style={{ display: "none" }} />
             <button type="button" className="btn btn--primary btn--large" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
               {uploading ? "Processing…" : "Upload a file"}
             </button>
@@ -129,7 +156,10 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
                         : "Preparing…"}
                     </p>
                   </div>
-                  <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-secondary)", flexShrink: 0 }}>{pct}%</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-secondary)" }}>{pct}%</span>
+                    {removeControl(book)}
+                  </span>
                 </div>
                 <div style={{ height: 3, background: "var(--bg-secondary)", borderRadius: 2, marginTop: 10, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${pct}%`, background: "var(--accent)", borderRadius: 2, transition: "width 600ms ease" }} />
@@ -141,7 +171,10 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
           if (book.status === "failed") {
             return (
               <div key={book.id} className="card" style={{ width: "100%" }}>
-                <p style={{ fontWeight: 600, fontSize: "0.95rem", margin: "0 0 2px" }}>{book.title}</p>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
+                  <p style={{ fontWeight: 600, fontSize: "0.95rem", margin: "0 0 2px" }}>{book.title}</p>
+                  {removeControl(book)}
+                </div>
                 <p className="error-text" style={{ fontSize: "0.78rem", margin: 0 }}>
                   Processing failed{processing[book.id]?.error ? `: ${processing[book.id].error}` : ""}. Try uploading again.
                 </p>
@@ -162,11 +195,14 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
                   <p style={{ fontWeight: 600, fontSize: "0.95rem", margin: "0 0 2px" }}>{book.title}</p>
                   {book.author && <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: 0 }}>{book.author}</p>}
                 </div>
-                {book.totalTopics > 0 && (
-                  <span style={{ fontSize: "0.82rem", fontWeight: 600, color: pct === 100 ? "var(--success)" : "var(--text-secondary)", flexShrink: 0 }}>
-                    {pct}%
-                  </span>
-                )}
+                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+                  {book.totalTopics > 0 && (
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: pct === 100 ? "var(--success)" : "var(--text-secondary)" }}>
+                      {pct}%
+                    </span>
+                  )}
+                  {removeControl(book)}
+                </span>
               </div>
               {book.totalTopics > 0 && (
                 <div style={{ height: 3, background: "var(--bg-secondary)", borderRadius: 2, marginTop: 10, overflow: "hidden" }}>
