@@ -72,6 +72,41 @@ interface ChunkResult {
   chapters: Array<{ title: string; concepts: Array<{ label: string; question: string; sourcePassage: string; sourceLocator: string }> }>;
 }
 
+// The model is TOLD the schema, but at ~55 calls per long book it will
+// occasionally return chapters as an object map, a nested wrapper, or with
+// missing fields. Never trust the shape - coerce what's coercible, reject
+// the rest, and let the caller retry with a correction.
+function normalizeChunkResult(input: any): ChunkResult | null {
+  if (!input || typeof input !== "object") return null;
+  let chapters: any = input.chapters;
+  if (chapters && !Array.isArray(chapters) && typeof chapters === "object") {
+    chapters = Object.values(chapters);
+  }
+  if (!Array.isArray(chapters)) return null;
+  const cleaned = chapters
+    .filter((ch: any) => ch && typeof ch === "object" && typeof ch.title === "string" && ch.title.trim())
+    .map((ch: any) => ({
+      title: ch.title.trim(),
+      concepts: Array.isArray(ch.concepts)
+        ? ch.concepts
+            .filter((c: any) => c && typeof c === "object" && typeof c.label === "string" && c.label.trim())
+            .map((c: any) => ({
+              label: String(c.label),
+              question: typeof c.question === "string" ? c.question : "",
+              sourcePassage: typeof c.sourcePassage === "string" ? c.sourcePassage : "",
+              sourceLocator: typeof c.sourceLocator === "string" ? c.sourceLocator : "location not specified",
+            }))
+        : [],
+    }))
+    .filter((ch: any) => ch.concepts.length > 0);
+  if (cleaned.length === 0) return null;
+  return {
+    title: typeof input.title === "string" ? input.title : "",
+    author: typeof input.author === "string" && input.author.trim() ? input.author : null,
+    chapters: cleaned,
+  };
+}
+
 // Split on natural boundaries: prefer EPUB chapter markers, then blank lines,
 // then single newlines, then a hard cut. Deterministic - resuming a job
 // recomputes identical chunks from the stored raw text.
@@ -110,18 +145,27 @@ async function structureChunk(chunkText: string, chunkIndex: number, chunksTotal
         ? ` Chapters already extracted from earlier sections, in order: ${priorChapterTitles.map((t) => `"${t}"`).join(", ")}. The most recent is "${priorChapterTitles[priorChapterTitles.length - 1]}".`
         : "");
 
-  const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: 8000,
-    system: STRUCTURE_PROMPT,
-    tools: [STRUCTURE_TOOL],
-    tool_choice: { type: "tool", name: "submit_book_structure" },
-    messages: [{ role: "user", content: `${contextNote} Read it and extract the chapter structure and key concepts:\n\n${chunkText}` }],
-  });
+  const ask = async (correction?: string): Promise<ChunkResult | null> => {
+    const message = await client.messages.create({
+      model: MODEL,
+      max_tokens: 8000,
+      system: STRUCTURE_PROMPT,
+      tools: [STRUCTURE_TOOL],
+      tool_choice: { type: "tool", name: "submit_book_structure" },
+      messages: [{ role: "user", content: `${contextNote} Read it and extract the chapter structure and key concepts:\n\n${chunkText}${correction ? `\n\nCORRECTION - your previous response was malformed: ${correction} Return chapters as a JSON ARRAY of objects, each with a title string and a concepts array.` : ""}` }],
+    });
+    const toolUse = message.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
+    if (!toolUse) return null;
+    return normalizeChunkResult(toolUse.input);
+  };
 
-  const toolUse = message.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
-  if (!toolUse) throw new Error("The processing engine did not return a structured result.");
-  return toolUse.input as ChunkResult;
+  let result = await ask();
+  if (!result) {
+    console.warn(`Chunk ${chunkIndex + 1}/${chunksTotal}: malformed structure returned, retrying once with correction.`);
+    result = await ask("chapters was not a usable array of chapter objects.");
+  }
+  if (!result) throw new Error(`The processing engine returned a malformed structure for section ${chunkIndex + 1} of ${chunksTotal}, twice. Try uploading again.`);
+  return result;
 }
 
 // Persist one chunk's chapters/concepts. If the chunk's first chapter shares
