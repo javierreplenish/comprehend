@@ -3,7 +3,7 @@ import "dotenv/config";
 import express from "express";
 import session from "express-session";
 import SqliteStoreFactory from "better-sqlite3-session-store";
-import { login, logout, me, requireAuth, signup } from "./auth";
+import { effectivePlan, login, logout, me, publicUser, requireAuth, signup } from "./auth";
 import { db } from "./db";
 import { getDueTopics, respondToTurn, startSession } from "./sessions";
 import { seedTestContent } from "./seed";
@@ -115,7 +115,7 @@ app.patch("/api/auth/profile", requireAuth, express.json(), (req, res) => {
     db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email, req.session.userId);
   }
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.session.userId) as any;
-  res.json({ user: { id: user.id, email: user.email, displayName: user.display_name, profilePic: user.profile_pic } });
+  res.json({ user: publicUser(user) });
 });
 
 // Upload profile picture (stored as base64 data URL in the DB for simplicity)
@@ -163,6 +163,17 @@ app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req,
     if (files.length === 0) {
       res.status(400).json({ error: "No file was uploaded." });
       return;
+    }
+
+    // Enforce the free-tier book limit server-side - the Library UI hides the
+    // upload button, but the API must be the real gate.
+    const uploader = db.prepare("SELECT email, plan FROM users WHERE id = ?").get(req.session.userId) as { email: string; plan: string };
+    if (effectivePlan(uploader) !== "pro") {
+      const bookCount = (db.prepare("SELECT COUNT(*) as n FROM books WHERE uploaded_by_user_id = ?").get(req.session.userId) as { n: number }).n;
+      if (bookCount >= 2) {
+        res.status(403).json({ error: "Free accounts can study up to 2 books. Upgrade to Pro for unlimited books." });
+        return;
+      }
     }
 
     const isImage = (f: Express.Multer.File) => f.mimetype.startsWith("image/");

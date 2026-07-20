@@ -20,8 +20,16 @@ interface UserRow {
   stripe_customer_id: string;
 }
 
-function publicUser(user: UserRow) {
-  return { id: user.id, email: user.email, displayName: user.display_name, profilePic: user.profile_pic, plan: user.plan };
+// The admin account always has pro entitlements - no self-checkout needed,
+// and it can't regress if the database row is ever reset.
+export function effectivePlan(user: Pick<UserRow, "email" | "plan">): string {
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+  if (adminEmail && user.email.trim().toLowerCase() === adminEmail) return "pro";
+  return user.plan;
+}
+
+export function publicUser(user: UserRow) {
+  return { id: user.id, email: user.email, displayName: user.display_name, profilePic: user.profile_pic, plan: effectivePlan(user) };
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
