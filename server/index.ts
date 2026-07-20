@@ -8,7 +8,8 @@ import { db } from "./db";
 import { getDueTopics, respondToTurn, startSession } from "./sessions";
 import { seedTestContent } from "./seed";
 import { synthesizeTopicsForChapter } from "./topics";
-import { extractTextFromPdf, processUploadedText } from "./upload";
+import { extractUploadedFile } from "./upload";
+import { getBookProcessingStatus, resumeInterruptedJobs, startImageProcessingJob, startProcessingJob } from "./processing";
 import multer from "multer";
 import Stripe from "stripe";
 
@@ -21,6 +22,44 @@ app.use(cors({
   origin: process.env.NODE_ENV === "production" ? true : (process.env.CLIENT_ORIGIN ?? "http://localhost:5173"),
   credentials: true,
 }));
+// Stripe webhook — MUST be registered before express.json(), which would
+// otherwise consume and parse the body first. stripe.webhooks.constructEvent
+// needs the raw bytes or signature verification fails on every event.
+app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  if (!stripe) { res.sendStatus(400); return; }
+  try {
+    let event: Stripe.Event;
+    if (process.env.STRIPE_WEBHOOK_SECRET) {
+      const sig = req.headers["stripe-signature"] as string;
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    } else if (process.env.NODE_ENV === "production") {
+      // Never accept unverified webhook payloads in production - anyone who
+      // finds the URL could otherwise grant themselves a pro plan.
+      console.error("Webhook received but STRIPE_WEBHOOK_SECRET is not set. Rejecting.");
+      res.sendStatus(400);
+      return;
+    } else {
+      event = JSON.parse(req.body.toString("utf-8")) as Stripe.Event;
+    }
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.customer) {
+        db.prepare("UPDATE users SET plan = 'pro' WHERE stripe_customer_id = ?").run(String(session.customer));
+      }
+    }
+    if (event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object as Stripe.Subscription;
+      if (subscription.customer) {
+        db.prepare("UPDATE users SET plan = 'free' WHERE stripe_customer_id = ?").run(String(subscription.customer));
+      }
+    }
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Webhook error:", error);
+    res.sendStatus(400);
+  }
+});
+
 app.use(express.json({ limit: "1mb" }));
 
 if (!process.env.SESSION_SECRET) {
@@ -116,36 +155,75 @@ app.post("/api/dev/seed", requireAuth, (req, res) => {
 // identify chapters and key concepts, stores everything for the existing
 // study flow. The AI call can take 10-30 seconds depending on document size.
 
-app.post("/api/books/upload", requireAuth, upload.single("file"), async (req, res) => {
+app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req, res) => {
   try {
-    if (!req.file) {
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    if (files.length === 0) {
       res.status(400).json({ error: "No file was uploaded." });
       return;
     }
 
-    let rawText: string;
-    const mime = req.file.mimetype;
-    const name = req.file.originalname;
+    const isImage = (f: Express.Multer.File) => f.mimetype.startsWith("image/");
+    const images = files.filter(isImage);
+    const docs = files.filter((f) => !isImage(f));
 
-    if (mime === "application/pdf") {
-      rawText = await extractTextFromPdf(req.file.buffer);
-      if (!rawText.trim()) {
-        res.status(400).json({ error: "Could not extract text from this PDF. It may be a scanned document — only typed PDFs are supported for now." });
-        return;
-      }
-    } else if (mime === "text/plain" || name.endsWith(".txt") || name.endsWith(".md")) {
-      rawText = req.file.buffer.toString("utf-8");
-    } else {
-      res.status(400).json({ error: `Unsupported file type (${mime}). Upload a PDF or plain text file.` });
+    // Screenshots: transcription happens inside the background job (each
+    // image is its own vision call), so this returns just as fast.
+    if (images.length > 0 && docs.length === 0) {
+      const label = images.length === 1 ? images[0].originalname.replace(/\.[^.]+$/, "") : `Screenshots (${images.length} pages)`;
+      const job = startImageProcessingJob(req.session.userId!, images.map((f) => ({ buffer: f.buffer, mimetype: f.mimetype })), label);
+      res.status(202).json(job);
+      return;
+    }
+    if (images.length > 0 && docs.length > 0) {
+      res.status(400).json({ error: "Upload screenshots and documents separately — images become one book per batch." });
+      return;
+    }
+    if (docs.length > 1) {
+      res.status(400).json({ error: "Upload one document at a time (multiple files are only supported for screenshots)." });
       return;
     }
 
-    const result = await processUploadedText(req.session.userId!, rawText, name);
-    res.status(201).json(result);
+    const file = docs[0];
+    const { text } = await extractUploadedFile(file.buffer, file.mimetype, file.originalname);
+    if (!text.trim()) {
+      res.status(400).json({ error: "Could not extract any text from this file. If it's a PDF, it may be a scanned document — try uploading screenshots of the pages instead." });
+      return;
+    }
+
+    // Extraction is fast; the AI structuring is not. Kick off a background
+    // job and return immediately - the client polls /api/books/:id/status
+    // and the Library shows a live progress bar.
+    const job = startProcessingJob(req.session.userId!, text, file.originalname);
+    res.status(202).json(job);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "Could not process the uploaded file." });
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not process the uploaded file." });
   }
+});
+
+app.get("/api/books/:bookId/status", requireAuth, (req, res) => {
+  const status = getBookProcessingStatus(Number(req.params.bookId), req.session.userId!);
+  if (!status) { res.status(404).json({ error: "Book not found." }); return; }
+  res.json(status);
+});
+
+// ── Per-topic notes ──
+app.get("/api/topics/:topicId/note", requireAuth, (req, res) => {
+  const row = db.prepare("SELECT content, updated_at FROM notes WHERE user_id = ? AND topic_id = ?").get(req.session.userId, Number(req.params.topicId)) as { content: string; updated_at: string } | undefined;
+  res.json({ content: row?.content ?? "", updatedAt: row?.updated_at ?? null });
+});
+
+app.put("/api/topics/:topicId/note", requireAuth, (req, res) => {
+  const content = typeof req.body?.content === "string" ? req.body.content : "";
+  if (content.length > 50_000) { res.status(400).json({ error: "Note is too long." }); return; }
+  const topic = db.prepare("SELECT id FROM topics WHERE id = ?").get(Number(req.params.topicId));
+  if (!topic) { res.status(404).json({ error: "Topic not found." }); return; }
+  db.prepare(
+    `INSERT INTO notes (user_id, topic_id, content, updated_at) VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id, topic_id) DO UPDATE SET content = excluded.content, updated_at = datetime('now')`
+  ).run(req.session.userId, Number(req.params.topicId), content);
+  res.json({ ok: true });
 });
 
 app.get("/api/books/:bookId/chapters", requireAuth, (req, res) => {
@@ -277,37 +355,6 @@ app.post("/api/billing/checkout", requireAuth, async (req, res) => {
   }
 });
 
-// Stripe webhook — confirms payment and upgrades the user's plan.
-// In production, verify the webhook signature with STRIPE_WEBHOOK_SECRET.
-app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
-  if (!stripe) { res.sendStatus(400); return; }
-  try {
-    let event: Stripe.Event;
-    if (process.env.STRIPE_WEBHOOK_SECRET) {
-      const sig = req.headers["stripe-signature"] as string;
-      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-    } else {
-      event = req.body as Stripe.Event;
-    }
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      if (session.customer) {
-        db.prepare("UPDATE users SET plan = 'pro' WHERE stripe_customer_id = ?").run(String(session.customer));
-      }
-    }
-    if (event.type === "customer.subscription.deleted") {
-      const subscription = event.data.object as Stripe.Subscription;
-      if (subscription.customer) {
-        db.prepare("UPDATE users SET plan = 'free' WHERE stripe_customer_id = ?").run(String(subscription.customer));
-      }
-    }
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("Webhook error:", error);
-    res.sendStatus(400);
-  }
-});
-
 // ── Admin Dashboard ──
 function requireAdmin(req: any, res: any, next: any) {
   if (!req.session.userId) { res.status(401).json({ error: "Sign in required." }); return; }
@@ -348,6 +395,10 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.join(distPath, "index.html"));
   });
 }
+
+// Any upload that was mid-processing when the last process died (deploy,
+// crash, Render restart) picks up from its last completed chunk.
+resumeInterruptedJobs();
 
 app.listen(port, () => {
   console.log(`Comprehend server listening on http://localhost:${port}`);

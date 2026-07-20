@@ -1,58 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
+import AdmZip from "adm-zip";
+import { XMLParser } from "fast-xml-parser";
+import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
-import { db } from "./db";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
-
-const STRUCTURE_PROMPT = `You read the raw text extracted from a book (or a section of one) and produce a structured breakdown of its chapters and key concepts as study flashcards. This is NOT a summary — it's a study-deck extraction, like Quizlet.
-
-Rules:
-1. Identify chapter or section boundaries from the text. Use explicit headings if present; infer logical breaks if not. For a short article or essay with no chapters, treat the whole thing as one chapter.
-2. For each chapter, extract the key concepts worth studying — the actual ideas, arguments, and claims the author makes, not trivial details. Each concept needs:
-   - A short, specific label naming the idea (not vague like "introduction" — specific like "Force as a last resort behind subtler controls")
-   - A study question that tests understanding of this concept (not "what is X" — something that requires thinking, like "Why does the author argue that force alone is insufficient for social control?")
-   - The actual passage from the text that answers this question (verbatim from the source, not paraphrased — the learner needs to see the real words)
-   - A page reference if detectable from the text, otherwise "location not specified"
-3. Aim for roughly 3-8 concepts per chapter depending on density. A short chapter might have 3; a dense one might have 8. Never fewer than 2 if the text has any substance at all.
-4. Order concepts within each chapter to match the reading progression, not alphabetically.
-5. Never invent content not present in the provided text.`;
-
-const STRUCTURE_TOOL: Anthropic.Tool = {
-  name: "submit_book_structure",
-  description: "Submit the extracted chapter and concept structure with Q&A flashcards.",
-  input_schema: {
-    type: "object",
-    required: ["title", "author", "chapters"],
-    properties: {
-      title: { type: "string" },
-      author: { type: ["string", "null"] },
-      chapters: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["title", "concepts"],
-          properties: {
-            title: { type: "string" },
-            concepts: {
-              type: "array",
-              items: {
-                type: "object",
-                required: ["label", "question", "sourcePassage", "sourceLocator"],
-                properties: {
-                  label: { type: "string" },
-                  question: { type: "string", description: "A study question that tests understanding of this concept." },
-                  sourcePassage: { type: "string" },
-                  sourceLocator: { type: "string" },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-};
+// ── Text extraction for every supported upload format ──
+// This module does NOT talk to the AI. It turns an uploaded file into plain
+// text (with chapter markers where the format gives us real boundaries) and
+// hands off to the chunked processing pipeline in processing.ts.
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
   const parser = new PDFParse({ data: new Uint8Array(buffer) });
@@ -60,65 +14,101 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
   return result.text;
 }
 
-export interface ProcessedBook {
-  bookId: number;
-  title: string;
-  author: string | null;
-  chapterCount: number;
-  conceptCount: number;
+export async function extractTextFromDocx(buffer: Buffer): Promise<string> {
+  const result = await mammoth.extractRawText({ buffer });
+  return result.value;
 }
 
-export async function processUploadedText(userId: number, rawText: string, originalFilename: string): Promise<ProcessedBook> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY is not set. Add it to your .env file.");
+// EPUB is a zip: META-INF/container.xml points at an OPF package file whose
+// <spine> lists the reading order of XHTML documents. We walk the spine so
+// the text comes out in the order a reader would see it, and we drop an
+// explicit "=== CHAPTER BREAK ===" marker between spine items - EPUBs give
+// us real chapter boundaries for free, which makes the AI's chapter
+// detection far more reliable than PDF heuristics.
+export const EPUB_CHAPTER_MARKER = "\n\n=== CHAPTER BREAK ===\n\n";
+
+export async function extractTextFromEpub(buffer: Buffer): Promise<string> {
+  const zip = new AdmZip(buffer);
+  const xml = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
+
+  const containerEntry = zip.getEntry("META-INF/container.xml");
+  if (!containerEntry) throw new Error("Not a valid EPUB: missing META-INF/container.xml");
+  const container = xml.parse(containerEntry.getData().toString("utf-8"));
+  const rootfiles = container?.container?.rootfiles?.rootfile;
+  const rootfile = Array.isArray(rootfiles) ? rootfiles[0] : rootfiles;
+  const opfPath: string | undefined = rootfile?.["@_full-path"];
+  if (!opfPath) throw new Error("Not a valid EPUB: could not locate the package file");
+
+  const opfEntry = zip.getEntry(opfPath);
+  if (!opfEntry) throw new Error(`Not a valid EPUB: package file ${opfPath} is missing`);
+  const opf = xml.parse(opfEntry.getData().toString("utf-8"));
+  const pkg = opf.package ?? opf["opf:package"];
+  if (!pkg) throw new Error("Not a valid EPUB: malformed package file");
+
+  // Manifest: id → href. Spine: ordered list of idrefs.
+  const manifestItems = pkg.manifest?.item;
+  const items: any[] = Array.isArray(manifestItems) ? manifestItems : manifestItems ? [manifestItems] : [];
+  const hrefById = new Map<string, string>();
+  for (const item of items) {
+    if (item?.["@_id"] && item?.["@_href"]) hrefById.set(item["@_id"], item["@_href"]);
   }
 
-  const truncated = rawText.length > 80000 ? rawText.slice(0, 80000) + "\n\n[Text truncated for processing]" : rawText;
+  const spineItems = pkg.spine?.itemref;
+  const spine: any[] = Array.isArray(spineItems) ? spineItems : spineItems ? [spineItems] : [];
+  const opfDir = opfPath.includes("/") ? opfPath.slice(0, opfPath.lastIndexOf("/") + 1) : "";
 
-  const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: 8000,
-    system: STRUCTURE_PROMPT,
-    tools: [STRUCTURE_TOOL],
-    tool_choice: { type: "tool", name: "submit_book_structure" },
-    messages: [{ role: "user", content: `Here is the full text extracted from "${originalFilename}". Read it and extract the chapter structure and key concepts:\n\n${truncated}` }],
-  });
+  const sections: string[] = [];
+  for (const ref of spine) {
+    const href = hrefById.get(ref?.["@_idref"]);
+    if (!href) continue;
+    const entryPath = decodeURIComponent(opfDir + href).replace(/#.*$/, "");
+    const entry = zip.getEntry(entryPath);
+    if (!entry) continue;
+    const text = htmlToText(entry.getData().toString("utf-8"));
+    if (text.trim().length > 40) sections.push(text.trim()); // skip cover/blank pages
+  }
 
-  const toolUse = message.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
-  if (!toolUse) throw new Error("The processing engine did not return a structured result.");
+  if (sections.length === 0) throw new Error("Could not extract any readable text from this EPUB.");
+  return sections.join(EPUB_CHAPTER_MARKER);
+}
 
-  const result = toolUse.input as {
-    title: string;
-    author: string | null;
-    chapters: Array<{ title: string; concepts: Array<{ label: string; question: string; sourcePassage: string; sourceLocator: string }> }>;
-  };
+// Minimal HTML → text: strip scripts/styles, turn block-level closings into
+// line breaks, collapse entities and whitespace. Not a full parser, but EPUB
+// content documents are simple XHTML and this holds up well in practice.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<\/(h[1-6]|p|div|li|blockquote|tr)>/gi, "\n")
+    .replace(/<(br|hr)\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n");
+}
 
-  const insertBook = db.prepare("INSERT INTO books (title, author, status, uploaded_by_user_id) VALUES (?, ?, 'ready', ?)");
-  const insertChapter = db.prepare("INSERT INTO chapters (book_id, number, title, summary, order_index) VALUES (?, ?, ?, ?, ?)");
-  const insertConcept = db.prepare("INSERT INTO concepts (chapter_id, label, question, source_locator, source_passage, order_index) VALUES (?, ?, ?, ?, ?, ?)");
+export interface ExtractedUpload {
+  text: string;
+  kind: "pdf" | "epub" | "docx" | "text";
+}
 
-  let totalConcepts = 0;
-
-  const persist = db.transaction(() => {
-    const bookInfo = insertBook.run(result.title || originalFilename, result.author, userId);
-    const bookId = bookInfo.lastInsertRowid as number;
-
-    result.chapters.forEach((chapter, chapterIndex) => {
-      const conceptCount = chapter.concepts.length;
-      const summary = `${conceptCount} concept${conceptCount === 1 ? "" : "s"}`;
-      const chapterInfo = insertChapter.run(bookId, chapterIndex + 1, chapter.title, summary, chapterIndex);
-      const chapterId = chapterInfo.lastInsertRowid as number;
-
-      chapter.concepts.forEach((concept, conceptIndex) => {
-        insertConcept.run(chapterId, concept.label, concept.question || "", concept.sourceLocator, concept.sourcePassage, conceptIndex);
-        totalConcepts++;
-      });
-    });
-
-    return bookId;
-  });
-
-  const bookId = persist();
-
-  return { bookId, title: result.title || originalFilename, author: result.author, chapterCount: result.chapters.length, conceptCount: totalConcepts };
+export async function extractUploadedFile(buffer: Buffer, mimetype: string, filename: string): Promise<ExtractedUpload> {
+  const lower = filename.toLowerCase();
+  if (mimetype === "application/pdf" || lower.endsWith(".pdf")) {
+    return { text: await extractTextFromPdf(buffer), kind: "pdf" };
+  }
+  if (mimetype === "application/epub+zip" || lower.endsWith(".epub")) {
+    return { text: await extractTextFromEpub(buffer), kind: "epub" };
+  }
+  if (mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lower.endsWith(".docx")) {
+    return { text: await extractTextFromDocx(buffer), kind: "docx" };
+  }
+  if (mimetype === "text/plain" || lower.endsWith(".txt") || lower.endsWith(".md")) {
+    return { text: buffer.toString("utf-8"), kind: "text" };
+  }
+  throw new Error(`Unsupported file type (${mimetype}). Upload a PDF, EPUB, DOCX, or plain text file.`);
 }

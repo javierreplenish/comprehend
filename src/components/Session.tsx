@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { abandonSession, checkActiveSession, fetchTopicSourceCards, respondToTurn, startSession, type ActiveSessionTurn, type Flashcard } from "../lib/api";
 import { DIMENSION_ORDER, type Dimension } from "../types";
+import NotesPanel from "./NotesPanel";
 
 interface SessionProps {
   topicId: number;
@@ -254,7 +255,8 @@ export default function Session({ topicId, onDone, onHome }: SessionProps) {
             ))}
           </div>
         )}
-        <button type="button" className="btn btn--primary btn--block" onClick={onDone}>Back to your path</button>
+        <NotesPanel topicId={topicId} />
+        <button type="button" className="btn btn--primary btn--block" style={{ marginTop: "0.75rem" }} onClick={onDone}>Back to your path</button>
       </div>
     );
   }
@@ -268,6 +270,7 @@ export default function Session({ topicId, onDone, onHome }: SessionProps) {
       {completedPhases.map((phase) => renderPhaseCard(phase.dimension, DIMENSION_ORDER.indexOf(phase.dimension), "completed", phase.question, phase.answer))}
       {dimension && renderPhaseCard(dimension, currentDimensionIndex, "active")}
       {DIMENSION_ORDER.slice(currentDimensionIndex + 1).map((dim) => renderPhaseCard(dim, DIMENSION_ORDER.indexOf(dim), "locked"))}
+      <NotesPanel topicId={topicId} />
     </div>
   );
 }

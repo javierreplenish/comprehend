@@ -19,6 +19,51 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- One row per upload that needs chunked background processing. The raw
+  -- extracted text is stored here so an interrupted job (server restart,
+  -- deploy) can resume from the last completed chunk instead of losing the
+  -- upload. Cleared (raw_text = '') once the job finishes to keep the DB slim.
+  CREATE TABLE IF NOT EXISTS processing_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'queued', -- queued | running | done | failed
+    raw_text TEXT NOT NULL DEFAULT '',
+    original_filename TEXT NOT NULL DEFAULT '',
+    chunks_total INTEGER NOT NULL DEFAULT 0,
+    chunks_done INTEGER NOT NULL DEFAULT 0,
+    chunk_ms_total INTEGER NOT NULL DEFAULT 0, -- summed per-chunk duration, drives the ETA
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_processing_jobs_book ON processing_jobs(book_id);
+
+  -- Screenshot/image uploads: one row per image, in reading order. The blob
+  -- is kept only until its transcription lands (data is blanked after), so
+  -- an interrupted job can resume transcribing where it stopped without the
+  -- DB permanently carrying image data.
+  CREATE TABLE IF NOT EXISTS job_images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL REFERENCES processing_jobs(id) ON DELETE CASCADE,
+    order_index INTEGER NOT NULL,
+    mimetype TEXT NOT NULL,
+    data BLOB,
+    transcription TEXT, -- null until transcribed
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_job_images_job ON job_images(job_id);
+
+  -- Per-user, per-topic freeform notes. One row per (user, topic), replaced
+  -- on save - no history, deliberately simple.
+  CREATE TABLE IF NOT EXISTS notes (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    content TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, topic_id)
+  );
+
   CREATE TABLE IF NOT EXISTS books (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,

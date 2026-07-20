@@ -36,10 +36,40 @@ export interface Flashcard {
 
 export interface UploadResult {
   bookId: number;
-  title: string;
-  author: string | null;
-  chapterCount: number;
-  conceptCount: number;
+  jobId: number;
+  chunksTotal: number;
+}
+
+export interface BookProcessingStatus {
+  bookId: number;
+  status: "processing" | "ready" | "failed";
+  phase: "transcribing" | "structuring" | null;
+  imagesTotal: number;
+  chunksTotal: number;
+  chunksDone: number;
+  percent: number;
+  etaSeconds: number | null;
+  error: string | null;
+}
+
+export async function fetchBookStatus(bookId: number): Promise<BookProcessingStatus> {
+  const res = await fetch(`/api/books/${bookId}/status`, { credentials: "include" });
+  return parseOrThrow(res);
+}
+
+export async function fetchNote(topicId: number): Promise<{ content: string; updatedAt: string | null }> {
+  const res = await fetch(`/api/topics/${topicId}/note`, { credentials: "include" });
+  return parseOrThrow(res);
+}
+
+export async function saveNote(topicId: number, content: string): Promise<void> {
+  const res = await fetch(`/api/topics/${topicId}/note`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+  await parseOrThrow(res);
 }
 
 export interface StartSessionResult {
@@ -75,9 +105,9 @@ export async function seedSampleBook(): Promise<{ bookId: number }> {
   return parseOrThrow(res);
 }
 
-export async function uploadBook(file: File): Promise<UploadResult> {
+export async function uploadBook(files: File[]): Promise<UploadResult> {
   const formData = new FormData();
-  formData.append("file", file);
+  for (const file of files) formData.append("file", file);
   const res = await fetch("/api/books/upload", { method: "POST", credentials: "include", body: formData });
   return parseOrThrow(res);
 }
