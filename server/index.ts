@@ -407,7 +407,7 @@ app.post("/api/billing/portal", requireAuth, async (req, res) => {
 function requireAdmin(req: any, res: any, next: any) {
   if (!req.session.userId) { res.status(401).json({ error: "Sign in required." }); return; }
   const user = db.prepare("SELECT email FROM users WHERE id = ?").get(req.session.userId) as { email: string } | undefined;
-  if (!user || user.email !== ADMIN_EMAIL) { res.status(403).json({ error: "Not authorized." }); return; }
+  if (!user || user.email.trim().toLowerCase() !== ADMIN_EMAIL.trim().toLowerCase()) { res.status(403).json({ error: "Not authorized." }); return; }
   next();
 }
 
