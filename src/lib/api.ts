@@ -203,6 +203,37 @@ export interface AdminStats {
   recentBooks: Array<{ id: number; title: string; author: string; created_at: string; uploaded_by: string }>;
 }
 
+export interface BridgeStart { bridgeId: number; turnId: number; attemptNumber: number; questionText: string; topicA: string; topicB: string; }
+export type BridgeRespond =
+  | { action: "complete"; summaryText: string }
+  | { action: "narrow"; turnId: number; attemptNumber: number; questionText: string }
+  | { action: "incomplete"; supportiveText: string };
+
+export async function fetchBridgeEligibility(bookId: number): Promise<{ eligible: boolean }> {
+  const res = await fetch(`/api/books/${bookId}/bridge/eligibility`, { credentials: "include" });
+  return parseOrThrow(res);
+}
+
+export async function startBridgeChallenge(bookId: number): Promise<BridgeStart> {
+  const res = await fetch(`/api/books/${bookId}/bridge`, { method: "POST", credentials: "include" });
+  return parseOrThrow(res);
+}
+
+export async function respondToBridgeChallenge(bridgeId: number, answerText: string): Promise<BridgeRespond> {
+  const res = await fetch(`/api/bridges/${bridgeId}/respond`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ answerText }),
+  });
+  return parseOrThrow(res);
+}
+
+export async function createBillingPortalSession(): Promise<{ url: string }> {
+  const res = await fetch("/api/billing/portal", { method: "POST", credentials: "include" });
+  return parseOrThrow(res);
+}
+
 export async function fetchAdminStats(): Promise<AdminStats> {
   const res = await fetch("/api/admin/stats", { credentials: "include" });
   return parseOrThrow(res);

@@ -20,7 +20,11 @@ Rules, in priority order:
 
 6. If an answer is strong and there is a next dimension remaining, the action is "ask_question" for that next dimension, attemptNumber 1, with a short introText framing what this new stage is asking for (introText is required when moving to a new dimension; omit it - set to null - on narrowing attempts within the same dimension).
 
-7. Judge for genuine comprehension, not keyword matching. An answer that echoes the book's own sentences without demonstrating the reasoning behind them counts as weak, even if the words sound right.
+7. Judge for genuine comprehension, not keyword matching. An answer that echoes the book's own sentences without demonstrating the reasoning behind them counts as weak, even if the words sound right. If the input contains a SERVER SIGNAL that the answer overlaps the source verbatim, you must NOT advance - narrow with a question that explicitly asks the learner to put it in their own words, from their own angle.
+
+7b. Reasoning must be visible. A bare conclusion, however correct, is weak - a strong answer shows the *because*: the inference, mechanism, or evidence connecting claim to conclusion. When narrowing on this, ask for the missing link specifically ("what makes that true?"), not a repeat of the question.
+
+7c. Hints are questions, not statements. A good hint is a smaller question that aims the learner at the right angle ("what would happen to X if Y were removed?") - never a partial answer.
 
 8. Every question must be answerable from the concept's own source material - never invent facts, examples, or claims not grounded in it.
 
@@ -29,9 +33,9 @@ Rules, in priority order:
 The five dimensions, what each is actually testing:
 - clarify: can the learner state the concept in their own words, not the book's?
 - probe: do they understand the actual mechanism or reasoning underneath it, not just the label?
-- counterargument: can they name a real complication or objection, and address it?
-- application: can they apply the concept to a case the book never gave them?
-- synthesis: can they now state the concept in full, incorporating what the prior stages surfaced?`;
+- counterargument: can they STEELMAN a real objection - state the strongest version of it, including why a thoughtful person would find it persuasive - and then address that strong version? "Some people might disagree" or a strawman knocked over in one line is weak. If their objection is feeble, narrow by asking for the version a smart critic would actually make.
+- application: can they apply the concept to ONE concrete, specific case the book never gave them - named, with particulars - not a vague category like "this could apply to business"? If they answer with a category, narrow by asking them to commit to a single specific instance and trace the concept through it.
+- synthesis: can they now state the concept in full, incorporating what the prior stages surfaced - in particular, carrying the tension from the counterargument stage (the "yes, and yet") rather than reverting to the clean version from clarify? A synthesis that could have been written before the counterargument stage is weak.`;
 
 const DIALOGUE_TOOL: Anthropic.Tool = {
   name: "submit_dialogue_action",
@@ -80,7 +84,7 @@ Questions already asked in the learner's PRIOR (incomplete) sessions on this sam
 ${priorQuestions}
 
 ${input.hintRequested ? "The learner just requested a hint. Do not treat this as an answer." : `The learner's latest answer: """${input.latestAnswer}"""`}
-
+${input.advisoryNote ? `\nSERVER SIGNAL: ${input.advisoryNote}` : ""}
 Decide the next action now.`;
 }
 

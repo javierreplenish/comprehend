@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { AuthUser } from "../lib/auth";
-import { createCheckoutSession } from "../lib/api";
+import { createBillingPortalSession, createCheckoutSession } from "../lib/api";
 
 interface ProfilePageProps {
   user: AuthUser;
@@ -15,6 +15,7 @@ export default function ProfilePage({ user, onBack, onLogout, onUserUpdated }: P
   const [saving, setSaving] = useState(false);
   const [uploadingPic, setUploadingPic] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [billingBusy, setBillingBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -159,8 +160,29 @@ export default function ProfilePage({ user, onBack, onLogout, onUserUpdated }: P
 
       <div className="card" style={{ marginBottom: "0.75rem" }}>
         <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 4px" }}>Payment method</p>
-        <p style={{ fontSize: "0.85rem", color: "var(--muted)", margin: 0 }}>No payment method on file</p>
-        <button type="button" className="btn" style={{ marginTop: "0.5rem", fontSize: "0.78rem" }}>Add payment method</button>
+        <p style={{ fontSize: "0.85rem", color: "var(--muted)", margin: 0 }}>
+          {user.plan === "pro" ? "Managed through Stripe — update your card, view invoices, or cancel anytime." : "Your payment method is added securely during upgrade — nothing to set up beforehand."}
+        </p>
+        <button
+          type="button"
+          className="btn"
+          style={{ marginTop: "0.6rem", fontSize: "0.78rem" }}
+          disabled={billingBusy}
+          onClick={async () => {
+            setBillingBusy(true);
+            setError(null);
+            try {
+              const { url } = user.plan === "pro" ? await createBillingPortalSession() : await createCheckoutSession();
+              if (url) window.location.href = url;
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Could not open billing.");
+            } finally {
+              setBillingBusy(false);
+            }
+          }}
+        >
+          {billingBusy ? "Opening…" : user.plan === "pro" ? "Manage billing" : "Add payment method"}
+        </button>
       </div>
 
       {/* Sign out */}

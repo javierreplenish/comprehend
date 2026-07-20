@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { runDialogueTurn } from "./dialogue";
+import { isParroting } from "./textOverlap";
 import { computeNextSchedule, type SessionOutcome } from "./scheduler";
 import { DIMENSION_ORDER, type Dimension, type DialogueAction } from "../src/types";
 
@@ -28,6 +29,17 @@ function getTopic(topicId: number): TopicRow {
   return topic;
 }
 
+// The full text a learner could be parroting from: the topic's thesis plus
+// every source-card passage linked to it (those are shown verbatim in
+// Flashcard Lab and on passage reveal).
+function getTopicSourceText(topicId: number): string {
+  const topic = getTopic(topicId);
+  const cards = db.prepare(
+    `SELECT c.source_passage FROM topic_source_cards tsc JOIN concepts c ON c.id = tsc.concept_id WHERE tsc.topic_id = ?`
+  ).all(topicId) as Array<{ source_passage: string }>;
+  return [topic.thesis, ...cards.map((c) => c.source_passage)].join("\n");
+}
+
 function getPriorSessionQuestions(userId: number, topicId: number): string[] {
   const rows = db
     .prepare(
@@ -50,7 +62,13 @@ function ensureProgressRow(userId: number, topicId: number) {
 // Structural enforcement of the five-dimension sequence. The system prompt
 // TELLS the model not to skip dimensions or complete early - this function
 // actually CHECKS it. Prompt instructions are not a guarantee; this is.
-export function validateAction(action: DialogueAction, turn: TurnRow, hintRequested: boolean): string | null {
+export function validateAction(action: DialogueAction, turn: TurnRow, hintRequested: boolean, parroting = false): string | null {
+  // Anti-parroting is structural, like the dimension sequence: an answer
+  // that is substantially the source's own wording may never advance,
+  // regardless of how good the judge thought it sounded.
+  if (parroting && !turn.passage_shown && (action.type === "complete_session" || (action.type === "ask_question" && action.dimension !== turn.dimension))) {
+    return `You advanced, but the server detected the learner's answer is substantially verbatim from the source material. Restating the book's own words is not comprehension. Stay on dimension "${turn.dimension}" and ask them to express it in their own words, from their own angle.`;
+  }
   const currentIndex = DIMENSION_ORDER.indexOf(turn.dimension);
   const isLastDimension = currentIndex === DIMENSION_ORDER.length - 1;
   const nextDimension = isLastDimension ? null : DIMENSION_ORDER[currentIndex + 1];
@@ -135,6 +153,7 @@ export async function respondToTurn(userId: number, sessionId: number, turnId: n
   const sessionHistory = turns.map((t) => ({ dimension: t.dimension, questionText: t.question_text, answerText: t.answer_text }));
 
   const hintRequested = Boolean(input.hintRequested);
+  const parroting = !hintRequested && !turn.passage_shown && isParroting(input.answerText ?? "", getTopicSourceText(session.topic_id));
   if (hintRequested) {
     db.prepare("UPDATE dialogue_turns SET hint_requested = 1 WHERE id = ?").run(turnId);
     db.prepare("UPDATE dialogue_sessions SET used_hint = 1 WHERE id = ?").run(sessionId);
@@ -150,14 +169,17 @@ export async function respondToTurn(userId: number, sessionId: number, turnId: n
     priorSessionQuestions: getPriorSessionQuestions(userId, session.topic_id),
     latestAnswer: hintRequested ? null : (input.answerText ?? null),
     hintRequested,
+    advisoryNote: parroting
+      ? "The learner's answer overlaps the source material verbatim to a substantial degree. Do not advance on this answer - narrow, and ask for it in their own words."
+      : undefined,
   };
 
   let result = await runDialogueTurn(engineInput);
-  let violation = validateAction(result.action, turn, hintRequested);
+  let violation = validateAction(result.action, turn, hintRequested, parroting);
   if (violation) {
-    console.warn(`Dialogue engine violated the dimension sequence on turn ${turnId}: ${violation}`);
+    console.warn(`Dialogue engine violated the rules on turn ${turnId}: ${violation}`);
     result = await runDialogueTurn(engineInput, violation);
-    violation = validateAction(result.action, turn, hintRequested);
+    violation = validateAction(result.action, turn, hintRequested, parroting);
     if (violation) {
       throw new Error(`The reasoning engine could not produce a valid next step after correction: ${violation}`);
     }

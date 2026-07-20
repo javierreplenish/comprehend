@@ -28,7 +28,7 @@ Rules:
 3. Aim for roughly 3-8 concepts per chapter depending on density. A short chapter might have 3; a dense one might have 8. Never fewer than 2 if the text has any substance at all.
 4. Order concepts within each chapter to match the reading progression, not alphabetically.
 5. Never invent content not present in the provided text.
-6. You may be given one SECTION of a longer book, along with the titles of chapters already extracted from earlier sections. If the beginning of this section clearly continues the most recent of those chapters (it starts mid-argument, no new heading), title your first chapter EXACTLY the same as that most recent chapter title — its concepts will be merged into the existing chapter. Never re-extract concepts already covered by earlier chapter titles; only extract from the text in front of you.`;
+6. You may be given one SECTION of a longer book, along with the titles of chapters already extracted from earlier sections. If the beginning of this section clearly continues a chapter already in progress (it starts mid-argument or mid-paragraph, with no new heading), title your first chapter EXACTLY the single word CONTINUATION — its concepts will be appended to the preceding chapter automatically. Never re-extract concepts already covered by earlier chapter titles; only extract from the text in front of you.`;
 
 const STRUCTURE_TOOL: Anthropic.Tool = {
   name: "submit_book_structure",
@@ -141,7 +141,8 @@ function persistChunk(bookId: number, result: ChunkResult): void {
 
       let chapterId: number;
       let baseOrder = 0;
-      if (i === 0 && last && normalizeTitle(last.title) === normalizeTitle(chapter.title)) {
+      const isContinuation = normalizeTitle(chapter.title) === "continuation" || (i === 0 && last && normalizeTitle(last.title) === normalizeTitle(chapter.title));
+      if (isContinuation && last) {
         chapterId = last.id;
         baseOrder = (db.prepare("SELECT COUNT(*) as n FROM concepts WHERE chapter_id = ?").get(chapterId) as { n: number }).n;
       } else {
@@ -301,23 +302,33 @@ async function runJob(jobId: number): Promise<void> {
   }
 
   // ── Phase B: chunked structuring (all jobs) ──
-  // For image jobs the first `imageCount` progress units belong to phase A,
-  // so the text chunk index is chunks_done minus that offset.
+  // Chunks run in parallel batches of PARALLEL_CHUNKS, persisted strictly in
+  // order after each batch completes - roughly a 3x wall-clock speedup on
+  // long books. A chunk that starts mid-chapter titles its first chapter
+  // CONTINUATION and persistChunk stitches it onto the preceding one, so
+  // concurrency doesn't break chapter boundaries. Progress advances at batch
+  // boundaries, which keeps resume exact: chunks_done only ever counts
+  // chunks that are fully persisted.
+  const PARALLEL_CHUNKS = 3;
   const chunkOffset = imageCount > 0 ? imageCount : 0;
   const chunks = chunkText(job.raw_text);
-  for (let i = job.chunks_done - chunkOffset; i < chunks.length; i++) {
+  for (let batchStart = job.chunks_done - chunkOffset; batchStart < chunks.length; batchStart += PARALLEL_CHUNKS) {
+    const batchEnd = Math.min(batchStart + PARALLEL_CHUNKS, chunks.length);
     const priorTitles = (db.prepare("SELECT title FROM chapters WHERE book_id = ? ORDER BY order_index").all(job.book_id) as Array<{ title: string }>).map((c) => c.title);
     const startedAt = Date.now();
-    const result = await structureChunk(chunks[i], i, chunks.length, job.original_filename, priorTitles);
-    persistChunk(job.book_id, result);
 
-    if (i === 0) {
+    const results = await Promise.all(
+      Array.from({ length: batchEnd - batchStart }, (_, k) => structureChunk(chunks[batchStart + k], batchStart + k, chunks.length, job.original_filename, priorTitles))
+    );
+    for (const result of results) persistChunk(job.book_id, result);
+
+    if (batchStart === 0) {
       // First chunk carries the best title/author signal (front matter lives there).
-      db.prepare("UPDATE books SET title = ?, author = ? WHERE id = ?").run(result.title || job.original_filename, result.author, job.book_id);
+      db.prepare("UPDATE books SET title = ?, author = ? WHERE id = ?").run(results[0].title || job.original_filename, results[0].author, job.book_id);
     }
 
     const elapsed = Date.now() - startedAt;
-    db.prepare("UPDATE processing_jobs SET chunks_done = ?, chunk_ms_total = chunk_ms_total + ?, updated_at = datetime('now') WHERE id = ?").run(chunkOffset + i + 1, elapsed, jobId);
+    db.prepare("UPDATE processing_jobs SET chunks_done = ?, chunk_ms_total = chunk_ms_total + ?, updated_at = datetime('now') WHERE id = ?").run(chunkOffset + batchEnd, elapsed, jobId);
   }
 
   // Done: mark ready, drop the raw text so the DB doesn't carry whole books around.

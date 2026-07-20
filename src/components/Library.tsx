@@ -117,7 +117,7 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
             const job = processing[book.id];
             const pct = job?.percent ?? 0;
             return (
-              <div key={book.id} className="card" style={{ width: "100%" }}>
+              <button key={book.id} type="button" className="card" style={{ textAlign: "left", cursor: "pointer", width: "100%", display: "block" }} onClick={() => onOpenBook(book.id)}>
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontWeight: 600, fontSize: "0.95rem", margin: "0 0 2px" }}>{book.title}</p>
@@ -134,7 +134,8 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
                 <div style={{ height: 3, background: "var(--bg-secondary)", borderRadius: 2, marginTop: 10, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${pct}%`, background: "var(--accent)", borderRadius: 2, transition: "width 600ms ease" }} />
                 </div>
-              </div>
+                <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "8px 0 0" }}>Tap to start studying the chapters that are already ready</p>
+              </button>
             );
           }
           if (book.status === "failed") {

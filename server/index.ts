@@ -10,6 +10,7 @@ import { seedTestContent } from "./seed";
 import { synthesizeTopicsForChapter } from "./topics";
 import { extractUploadedFile } from "./upload";
 import { getBookProcessingStatus, resumeInterruptedJobs, startImageProcessingJob, startProcessingJob } from "./processing";
+import { bridgeEligibility, respondToBridge, startBridge } from "./bridges";
 import multer from "multer";
 import Stripe from "stripe";
 
@@ -208,6 +209,29 @@ app.get("/api/books/:bookId/status", requireAuth, (req, res) => {
   res.json(status);
 });
 
+// ── Connections: cross-topic transfer challenges ──
+app.get("/api/books/:bookId/bridge/eligibility", requireAuth, (req, res) => {
+  res.json(bridgeEligibility(req.session.userId!, Number(req.params.bookId)));
+});
+
+app.post("/api/books/:bookId/bridge", requireAuth, async (req, res) => {
+  try {
+    res.json(await startBridge(req.session.userId!, Number(req.params.bookId)));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not start the connection." });
+  }
+});
+
+app.post("/api/bridges/:bridgeId/respond", requireAuth, async (req, res) => {
+  try {
+    const answer = typeof req.body?.answerText === "string" ? req.body.answerText : "";
+    if (!answer.trim()) { res.status(400).json({ error: "Write an answer first." }); return; }
+    res.json(await respondToBridge(req.session.userId!, Number(req.params.bridgeId), answer));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not judge the answer." });
+  }
+});
+
 // ── Per-topic notes ──
 app.get("/api/topics/:topicId/note", requireAuth, (req, res) => {
   const row = db.prepare("SELECT content, updated_at FROM notes WHERE user_id = ? AND topic_id = ?").get(req.session.userId, Number(req.params.topicId)) as { content: string; updated_at: string } | undefined;
@@ -352,6 +376,29 @@ app.post("/api/billing/checkout", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Could not create checkout session." });
+  }
+});
+
+// Stripe Billing Portal — where a paying user manages their card, sees
+// invoices, or cancels. Requires the portal configuration to be saved once
+// in the Stripe dashboard (Settings → Billing → Customer portal).
+app.post("/api/billing/portal", requireAuth, async (req, res) => {
+  if (!stripe) {
+    res.status(503).json({ error: "Payment processing is not configured yet." });
+    return;
+  }
+  try {
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.session.userId) as any;
+    if (!user.stripe_customer_id) {
+      res.status(400).json({ error: "No billing profile yet — upgrade to Pro first and your payment method will be added during checkout." });
+      return;
+    }
+    const appUrl = process.env.APP_URL ?? (process.env.NODE_ENV === "production" ? `https://${req.headers.host}` : "http://localhost:5173");
+    const portal = await stripe.billingPortal.sessions.create({ customer: user.stripe_customer_id, return_url: appUrl });
+    res.json({ url: portal.url });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Could not open the billing portal." });
   }
 });
 

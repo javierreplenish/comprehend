@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { fetchChapters, fetchTopics, synthesizeTopics, type ChapterSummary, type TopicSummary } from "../lib/api";
+import { fetchBookStatus, fetchBridgeEligibility, fetchChapters, fetchTopics, synthesizeTopics, type BookProcessingStatus, type ChapterSummary, type TopicSummary } from "../lib/api";
+import BridgeChallenge from "./BridgeChallenge";
 
 interface StudyPathProps {
   bookId: number;
@@ -15,6 +16,8 @@ export default function StudyPath({ bookId, onBack, onReviewTopic, onOpenFlashca
   const [synthesizingChapterId, setSynthesizingChapterId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bookStatus, setBookStatus] = useState<BookProcessingStatus | null>(null);
+  const [bridgeEligible, setBridgeEligible] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -29,6 +32,45 @@ export default function StudyPath({ bookId, onBack, onReviewTopic, onOpenFlashca
   };
 
   useEffect(load, [bookId]);
+
+  useEffect(() => {
+    fetchBridgeEligibility(bookId).then(({ eligible }) => setBridgeEligible(eligible)).catch(() => {});
+  }, [bookId, topicsByChapter]);
+
+  // While the book is still processing, poll: refresh the chapter list as new
+  // ones land, and drop the banner the moment the job finishes. Silent
+  // reload (no spinner) so studying isn't interrupted by list refreshes.
+  useEffect(() => {
+    let stopped = false;
+    let lastDone = -1;
+    const tick = async () => {
+      try {
+        const status = await fetchBookStatus(bookId);
+        if (stopped) return;
+        setBookStatus(status);
+        if (status.chunksDone !== lastDone) {
+          lastDone = status.chunksDone;
+          const chs = await fetchChapters(bookId);
+          if (stopped) return;
+          setChapters(chs);
+          const entries = await Promise.all(chs.map(async (ch) => [ch.id, await fetchTopics(ch.id)] as const));
+          if (!stopped) setTopicsByChapter(Object.fromEntries(entries));
+        }
+        return status.status === "processing";
+      } catch {
+        return false;
+      }
+    };
+    const run = async () => {
+      if (!(await tick())) return;
+      const interval = setInterval(async () => {
+        if (!(await tick())) clearInterval(interval);
+      }, 4000);
+      return () => clearInterval(interval);
+    };
+    const cleanup = run();
+    return () => { stopped = true; void cleanup; };
+  }, [bookId]);
 
   const handleSynthesize = async (chapterId: number) => {
     setSynthesizingChapterId(chapterId);
@@ -58,6 +100,18 @@ export default function StudyPath({ bookId, onBack, onReviewTopic, onOpenFlashca
 
       {error && <p className="error-text">{error}</p>}
       {loading && <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>Loading…</p>}
+
+      {bookStatus?.status === "processing" && (
+        <div className="banner banner--muted" style={{ marginBottom: "0.85rem" }}>
+          <p style={{ margin: 0, fontWeight: 600, fontSize: "0.82rem" }}>Still processing the rest of this book</p>
+          <p style={{ margin: "4px 0 0", fontSize: "0.78rem" }}>You can start studying the chapters below — new ones appear automatically. {bookStatus.percent}% done.</p>
+          <div style={{ height: 3, background: "rgba(0,0,0,0.06)", borderRadius: 2, marginTop: 10, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${bookStatus.percent}%`, background: "var(--accent)", borderRadius: 2, transition: "width 600ms ease" }} />
+          </div>
+        </div>
+      )}
+
+      {bridgeEligible && <BridgeChallenge bookId={bookId} />}
 
       {!loading && (
         <>

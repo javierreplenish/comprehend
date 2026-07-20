@@ -56,6 +56,33 @@ db.exec(`
 
   -- Per-user, per-topic freeform notes. One row per (user, topic), replaced
   -- on save - no history, deliberately simple.
+  -- Cross-topic transfer challenges ("Connections"): one question that
+  -- forces the learner to relate two topics they've already mastered -
+  -- tension, dependency, or shared mechanism. The deepest critical-thinking
+  -- move the product tests.
+  CREATE TABLE IF NOT EXISTS bridge_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    topic_a_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    topic_b_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'in_progress', -- in_progress | completed | incomplete
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ended_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_bridge_sessions_user ON bridge_sessions(user_id, book_id);
+
+  CREATE TABLE IF NOT EXISTS bridge_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bridge_id INTEGER NOT NULL REFERENCES bridge_sessions(id) ON DELETE CASCADE,
+    attempt_number INTEGER NOT NULL,
+    question_text TEXT NOT NULL,
+    answer_text TEXT,
+    verdict TEXT, -- advance | narrow | incomplete | null while unanswered
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_bridge_turns_bridge ON bridge_turns(bridge_id);
+
   CREATE TABLE IF NOT EXISTS notes (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
