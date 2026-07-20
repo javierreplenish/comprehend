@@ -144,7 +144,7 @@ export default function AuthPanel({ onLogin, onSignup }: AuthPanelProps) {
         <button type="button" className="btn btn--primary btn--large" onClick={() => document.getElementById("auth-section")?.scrollIntoView({ behavior: "smooth" })}>
           Start comprehending
         </button>
-        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>Free for your first 2 books</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>Free for your first book</p>
       </div>
 
       {/* Product visual */}

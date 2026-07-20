@@ -170,8 +170,8 @@ app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req,
     const uploader = db.prepare("SELECT email, plan FROM users WHERE id = ?").get(req.session.userId) as { email: string; plan: string };
     if (effectivePlan(uploader) !== "pro") {
       const bookCount = (db.prepare("SELECT COUNT(*) as n FROM books WHERE uploaded_by_user_id = ?").get(req.session.userId) as { n: number }).n;
-      if (bookCount >= 2) {
-        res.status(403).json({ error: "Free accounts can study up to 2 books. Upgrade to Pro for unlimited books." });
+      if (bookCount >= 1) {
+        res.status(403).json({ error: "Your free book is in your library. Upgrade to Pro for unlimited books." });
         return;
       }
     }
@@ -199,6 +199,13 @@ app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req,
 
     const file = docs[0];
     const { text } = await extractUploadedFile(file.buffer, file.mimetype, file.originalname);
+    // Free tier is capped at roughly 300 pages (~550k extracted characters) so a
+    // single free upload can't be an 800-page monster - big books are a Pro thing.
+    const FREE_MAX_CHARS = 550_000;
+    if (effectivePlan(uploader) !== "pro" && text.length > FREE_MAX_CHARS) {
+      res.status(403).json({ error: "This book is longer than the free tier supports (about 300 pages). Upgrade to Pro for full-length books." });
+      return;
+    }
     if (!text.trim()) {
       res.status(400).json({ error: "Could not extract any text from this file. If it's a PDF, it may be a scanned document — try uploading screenshots of the pages instead." });
       return;

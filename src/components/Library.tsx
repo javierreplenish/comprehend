@@ -76,10 +76,10 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
       <h1 style={{ fontSize: "1.05rem", margin: "0 0 0.75rem" }}>Your library</h1>
 
       <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", padding: "1.25rem", marginBottom: "1rem" }}>
-        {books.length >= 2 && userPlan !== "pro" ? (
+        {books.length >= 1 && userPlan !== "pro" ? (
           <>
             <p style={{ margin: 0, fontSize: "0.88rem", textAlign: "center", fontWeight: 600 }}>You've reached the free limit</p>
-            <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", textAlign: "center" }}>Free accounts can study up to 2 books. Upgrade to add unlimited books.</p>
+            <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", textAlign: "center" }}>Your free book is in your library below. Upgrade for unlimited books of any length.</p>
             <button type="button" className="btn btn--primary btn--large" onClick={async () => {
               try {
                 const { url } = await createCheckoutSession();

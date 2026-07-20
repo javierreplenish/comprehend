@@ -143,7 +143,7 @@ export default function ProfilePage({ user, onBack, onLogout, onUserUpdated }: P
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <p style={{ fontWeight: 600, margin: "0 0 2px" }}>{user.plan === "pro" ? "Pro" : "Free"}</p>
-            <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: 0 }}>{user.plan === "pro" ? "Unlimited books" : "2 books included"}</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: 0 }}>{user.plan === "pro" ? "Unlimited books" : "1 book included"}</p>
           </div>
           {user.plan !== "pro" && (
             <button type="button" className="btn btn--primary" style={{ fontSize: "0.78rem" }} onClick={async () => {
