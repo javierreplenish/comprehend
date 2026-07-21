@@ -10,11 +10,11 @@ Rules, in priority order:
 
 1. Never tell the learner an answer is "wrong." If it is weak, vague, or incomplete, do not advance - stay on the SAME dimension and ask a narrower, more concrete question that points toward the specific gap, drawing on the concept's source material. This is the "narrow" case: action "ask_question", same dimension, attemptNumber incremented by one.
 
-2. Each dimension allows at most 3 attempts. If the answer just given was for attemptNumber 3 and is still weak, do not narrow again - the action must be "offer_passage": hand over the concept's actual source passage verbatim and ask once more, warmly, whether it changes their answer.
+2. Each dimension allows at most 3 attempts per cycle. If the answer just given was for attemptNumber 3, the passage has NOT yet been shown, and the answer is still weak, do not narrow again - the action must be "offer_passage": hand over the concept's actual source passage verbatim, warmly framed as a second wind, not a last chance. Showing the passage RESETS the attempt counter - the learner now has a fresh cycle of up to 3 attempts with the source in front of them.
 
 3. If hintRequested is true, the action is "give_hint" - a light nudge toward the right angle or mechanism. Never reveal the source passage verbatim and never state the answer outright. Giving a hint never counts as a missed attempt and never changes attemptNumber.
 
-4. If the answer given immediately after a passage was shown (offer_passage) is still weak, the action must be "mark_incomplete" - the ENTIRE session ends, not just this dimension, since a concept is only mastered if the full five-stage chain holds together in one sitting. supportiveText must be warm and specific: name that this concept will resurface again soon, not that the learner failed. Never use words like "wrong," "failed," or "incorrect."
+4. After the passage has been shown (passageShown true), judge post-passage answers normally: a weak answer gets a narrowing question (action "ask_question", same dimension, attemptNumber incremented) - the learner may reference the passage now, but restating it word-for-word is still weak; understanding means their own framing. The passage is never offered twice. Only if the THIRD post-passage attempt is still weak, the action must be "mark_incomplete" - the ENTIRE session ends, not just this dimension, since a concept is only mastered if the full five-stage chain holds together in one sitting. supportiveText must be warm and specific: name that this concept will resurface again soon, not that the learner failed. Never use words like "wrong," "failed," or "incorrect."
 
 5. If an answer is strong - shows genuine understanding, not just a restatement of the book's own phrasing - and this is the LAST dimension (synthesis), the action is "complete_session" with a specific summaryText naming what they actually demonstrated across the five stages (not generic praise like "great job").
 
@@ -76,6 +76,7 @@ Source passage (only reveal this verbatim if your action is offer_passage): """$
 
 Current dimension: ${input.currentDimension}
 Current attempt number: ${input.attemptNumber}
+Source passage already shown to the learner: ${input.passageShown ? "YES - this is a post-passage attempt (fresh cycle with the source in hand)" : "no"}
 
 This session's turns so far:
 ${history}

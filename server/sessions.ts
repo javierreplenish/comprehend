@@ -79,11 +79,17 @@ export function validateAction(action: DialogueAction, turn: TurnRow, hintReques
   if (action.type === "complete_session" && !isLastDimension) {
     return `You returned complete_session but the current dimension is "${turn.dimension}", not "synthesis" (the final dimension). Every topic must move through all five dimensions in order before completing.`;
   }
+  if (action.type === "offer_passage" && turn.passage_shown) {
+    return `You returned offer_passage, but the passage was already shown for this dimension. Post-passage, the options are a narrowing question (if attempts remain), advancement, or mark_incomplete after the third post-passage attempt.`;
+  }
   if (action.type === "offer_passage" && turn.attempt_number < 3) {
     return `You returned offer_passage but this was only attempt ${turn.attempt_number} of 3 on dimension "${turn.dimension}". The passage may only be offered after a third weak attempt at the same dimension.`;
   }
   if (action.type === "mark_incomplete" && !turn.passage_shown) {
-    return "You returned mark_incomplete, but the source passage was never offered first. mark_incomplete is only valid immediately after an offer_passage attempt still falls short.";
+    return "You returned mark_incomplete, but the source passage was never offered first. mark_incomplete is only valid after the passage has been shown AND a third post-passage attempt still falls short.";
+  }
+  if (action.type === "mark_incomplete" && turn.passage_shown && turn.attempt_number < 3) {
+    return `You returned mark_incomplete, but this was only post-passage attempt ${turn.attempt_number} of 3. The learner has attempts remaining - narrow with a more concrete question instead.`;
   }
   if (action.type === "ask_question") {
     const isSameDimension = action.dimension === turn.dimension;
@@ -92,7 +98,9 @@ export function validateAction(action: DialogueAction, turn: TurnRow, hintReques
       return `You returned ask_question for dimension "${action.dimension}", but from "${turn.dimension}" the only valid next dimensions are staying on "${turn.dimension}" (narrowing) or advancing to "${nextDimension ?? "none - this is the last dimension, so the only valid action is complete_session"}".`;
     }
     if (isSameDimension && turn.attempt_number >= 3) {
-      return `You returned a narrowing question, but attempt ${turn.attempt_number} on "${turn.dimension}" was already the third attempt. The next action must be offer_passage, not another narrowing question.`;
+      return turn.passage_shown
+        ? `You returned a narrowing question, but post-passage attempt ${turn.attempt_number} on "${turn.dimension}" was already the third of the post-passage cycle. If the answer is weak, the action must be mark_incomplete.`
+        : `You returned a narrowing question, but attempt ${turn.attempt_number} on "${turn.dimension}" was already the third attempt. The next action must be offer_passage, not another narrowing question.`;
     }
   }
   return null;
@@ -108,6 +116,7 @@ async function askFirstQuestion(userId: number, topicId: number, sessionId: numb
     priorSessionQuestions: getPriorSessionQuestions(userId, topicId),
     latestAnswer: null,
     hintRequested: false,
+    passageShown: false,
   });
   if (result.action.type !== "ask_question") throw new Error("Expected the first turn to be a question.");
   const { dimension, attemptNumber, questionText } = result.action;
@@ -165,6 +174,7 @@ export async function respondToTurn(userId: number, sessionId: number, turnId: n
     concept: { label: topic.label, sourceLocator: topic.source_locator, sourcePassage: topic.thesis },
     currentDimension: turn.dimension,
     attemptNumber: turn.attempt_number,
+    passageShown: Boolean(turn.passage_shown),
     sessionHistory,
     priorSessionQuestions: getPriorSessionQuestions(userId, session.topic_id),
     latestAnswer: hintRequested ? null : (input.answerText ?? null),
@@ -194,11 +204,12 @@ export async function respondToTurn(userId: number, sessionId: number, turnId: n
   if (action.type === "ask_question") {
     const isNewDimension = action.dimension !== turn.dimension;
     db.prepare("UPDATE dialogue_turns SET verdict = ? WHERE id = ?").run(isNewDimension ? "advance" : "narrow", turnId);
-    const info = db.prepare("INSERT INTO dialogue_turns (session_id, dimension, attempt_number, question_text) VALUES (?, ?, ?, ?)").run(
+    const info = db.prepare("INSERT INTO dialogue_turns (session_id, dimension, attempt_number, question_text, passage_shown) VALUES (?, ?, ?, ?, ?)").run(
       sessionId,
       action.dimension,
       action.attemptNumber,
       action.questionText,
+      action.dimension === turn.dimension ? turn.passage_shown : 0,
     );
     return { action: "ask_question" as const, turnId: info.lastInsertRowid as number, dimension: action.dimension, attemptNumber: action.attemptNumber, questionText: action.questionText, introText: action.introText };
   }
@@ -208,7 +219,7 @@ export async function respondToTurn(userId: number, sessionId: number, turnId: n
     db.prepare("UPDATE dialogue_sessions SET used_passage = 1 WHERE id = ?").run(sessionId);
     const nextTurnId = db
       .prepare("INSERT INTO dialogue_turns (session_id, dimension, attempt_number, question_text, passage_shown) VALUES (?, ?, ?, ?, 1)")
-      .run(sessionId, turn.dimension, turn.attempt_number, action.leadInText).lastInsertRowid as number;
+      .run(sessionId, turn.dimension, 1, action.leadInText).lastInsertRowid as number;
     return { action: "offer_passage" as const, leadInText: action.leadInText, sourcePassage: topic.thesis, turnId: nextTurnId };
   }
 

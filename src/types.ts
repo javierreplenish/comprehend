@@ -94,6 +94,8 @@ export interface DialogueEngineInput {
   /** The answer just submitted, or null if this is a hint request with no new answer yet. */
   latestAnswer: string | null;
   hintRequested: boolean;
+  /** True once the source passage has been revealed - post-passage attempts are a fresh cycle. */
+  passageShown: boolean;
   /** Server-detected signal passed to the judge (e.g. verbatim-overlap warning). */
   advisoryNote?: string;
 }

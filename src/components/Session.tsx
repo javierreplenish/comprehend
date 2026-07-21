@@ -128,7 +128,7 @@ export default function Session({ topicId, onDone, onHome }: SessionProps) {
         setQuestionText(result.questionText); setIntroText(result.introText); resetForNextTurn();
       } else if (result.action === "offer_passage") {
         setTurnId(result.turnId); setPassage({ leadInText: result.leadInText, sourcePassage: result.sourcePassage });
-        setAnswerText(""); setHintText(null);
+        setAttemptNumber(1); setAnswerText(""); setHintText(null);
       } else if (result.action === "complete_session") {
         if (dimension) setCompletedPhases((prev) => [...prev, { dimension, question: questionText, answer: answerText.trim() }]);
         setCompletion({ type: "complete", text: result.summaryText, nextDueInDays: result.nextDueInDays });
