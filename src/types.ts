@@ -103,7 +103,7 @@ export interface DialogueEngineInput {
 export type DialogueAction =
   | { type: "ask_question"; dimension: Dimension; attemptNumber: number; questionText: string; introText: string | null }
   | { type: "give_hint"; hintText: string }
-  | { type: "offer_passage"; leadInText: string }
+  | { type: "offer_passage"; leadInText: string; questionText: string }
   | { type: "complete_session"; summaryText: string }
   | { type: "mark_incomplete"; supportiveText: string };
 

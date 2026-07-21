@@ -84,7 +84,7 @@ export interface StartSessionResult {
 export type RespondResult =
   | { action: "give_hint"; hintText: string }
   | { action: "ask_question"; turnId: number; dimension: Dimension; attemptNumber: number; questionText: string; introText: string | null }
-  | { action: "offer_passage"; leadInText: string; sourcePassage: string; turnId: number }
+  | { action: "offer_passage"; leadInText: string; questionText: string; sourcePassage: string; turnId: number }
   | { action: "complete_session"; summaryText: string; nextDueInDays: number }
   | { action: "mark_incomplete"; supportiveText: string; nextDueInDays: number };
 

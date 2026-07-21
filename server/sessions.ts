@@ -66,7 +66,7 @@ export function validateAction(action: DialogueAction, turn: TurnRow, hintReques
   // Anti-parroting is structural, like the dimension sequence: an answer
   // that is substantially the source's own wording may never advance,
   // regardless of how good the judge thought it sounded.
-  if (parroting && !turn.passage_shown && (action.type === "complete_session" || (action.type === "ask_question" && action.dimension !== turn.dimension))) {
+  if (parroting && (action.type === "complete_session" || (action.type === "ask_question" && action.dimension !== turn.dimension))) {
     return `You advanced, but the server detected the learner's answer is substantially verbatim from the source material. Restating the book's own words is not comprehension. Stay on dimension "${turn.dimension}" and ask them to express it in their own words, from their own angle.`;
   }
   const currentIndex = DIMENSION_ORDER.indexOf(turn.dimension);
@@ -78,6 +78,9 @@ export function validateAction(action: DialogueAction, turn: TurnRow, hintReques
   }
   if (action.type === "complete_session" && !isLastDimension) {
     return `You returned complete_session but the current dimension is "${turn.dimension}", not "synthesis" (the final dimension). Every topic must move through all five dimensions in order before completing.`;
+  }
+  if (action.type === "offer_passage" && !action.questionText) {
+    return "offer_passage must include questionText: a fresh question re-angled from the one the learner was stuck on, which the passage informs but does not contain.";
   }
   if (action.type === "offer_passage" && turn.passage_shown) {
     return `You returned offer_passage, but the passage was already shown for this dimension. Post-passage, the options are a narrowing question (if attempts remain), advancement, or mark_incomplete after the third post-passage attempt.`;
@@ -162,7 +165,10 @@ export async function respondToTurn(userId: number, sessionId: number, turnId: n
   const sessionHistory = turns.map((t) => ({ dimension: t.dimension, questionText: t.question_text, answerText: t.answer_text }));
 
   const hintRequested = Boolean(input.hintRequested);
-  const parroting = !hintRequested && !turn.passage_shown && isParroting(input.answerText ?? "", getTopicSourceText(session.topic_id));
+  // Structural guard stays ON post-passage: the fresh question is re-angled so
+  // the passage informs but does not contain the answer - quoting it back is
+  // therefore never an answer.
+  const parroting = !hintRequested && isParroting(input.answerText ?? "", getTopicSourceText(session.topic_id));
   if (hintRequested) {
     db.prepare("UPDATE dialogue_turns SET hint_requested = 1 WHERE id = ?").run(turnId);
     db.prepare("UPDATE dialogue_sessions SET used_hint = 1 WHERE id = ?").run(sessionId);
@@ -219,8 +225,8 @@ export async function respondToTurn(userId: number, sessionId: number, turnId: n
     db.prepare("UPDATE dialogue_sessions SET used_passage = 1 WHERE id = ?").run(sessionId);
     const nextTurnId = db
       .prepare("INSERT INTO dialogue_turns (session_id, dimension, attempt_number, question_text, passage_shown) VALUES (?, ?, ?, ?, 1)")
-      .run(sessionId, turn.dimension, 1, action.leadInText).lastInsertRowid as number;
-    return { action: "offer_passage" as const, leadInText: action.leadInText, sourcePassage: topic.thesis, turnId: nextTurnId };
+      .run(sessionId, turn.dimension, 1, action.questionText).lastInsertRowid as number;
+    return { action: "offer_passage" as const, leadInText: action.leadInText, questionText: action.questionText, sourcePassage: topic.thesis, turnId: nextTurnId };
   }
 
   if (action.type === "complete_session") {
