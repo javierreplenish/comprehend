@@ -80,7 +80,8 @@ app.use(
     secret: process.env.SESSION_SECRET ?? "dev-only-insecure-secret",
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 60 * 60 * 24 * 30 },
+    rolling: true, // every visit renews the clock - active users are never logged out
+    cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 60 * 60 * 24 * 60 },
   }),
 );
 
