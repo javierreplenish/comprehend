@@ -44,7 +44,7 @@ export default function AuthPanel({ onLogin, onSignup }: AuthPanelProps) {
   const phaseDemo = (
     <div className="landing-demo" style={{ background: "var(--bg-secondary)", borderRadius: 16, padding: "20px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <span style={{ fontSize: "0.78rem", fontWeight: 600 }}>Session — How incentives shape behavior</span>
+        <span style={{ fontSize: "0.78rem", fontWeight: 600 }}>Mastery · How incentives shape behavior</span>
         <span style={{ fontSize: "0.68rem", color: "var(--muted)" }}>Ch. 4</span>
       </div>
 
@@ -134,15 +134,15 @@ export default function AuthPanel({ onLogin, onSignup }: AuthPanelProps) {
 
       {/* Hero */}
       <div style={{ textAlign: "center", padding: "2rem 0 2.5rem" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>Study tool for critical thinkers</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>The critical thinking engine for serious readers</p>
         <h1 className="landing-hero-title">
-          Read books.<br />Actually understand them.
+          Don't just read ideas.<br />Learn to interrogate them.
         </h1>
-        <p style={{ fontSize: "1rem", color: "var(--text-secondary)", margin: "0 auto 28px", maxWidth: 440, lineHeight: 1.7 }}>
-          Upload any book. AI surfaces the real ideas. Then five stages of Socratic dialogue push your understanding until you've genuinely earned each concept.
+        <p style={{ fontSize: "1rem", color: "var(--text-secondary)", margin: "0 auto 28px", maxWidth: 460, lineHeight: 1.7 }}>
+          Comprehend turns any book into a structured critical thinking workout — five Socratic stages that make you explain, probe, steelman, apply, and synthesize every idea before you move on.
         </p>
         <button type="button" className="btn btn--primary btn--large" onClick={() => document.getElementById("auth-section")?.scrollIntoView({ behavior: "smooth" })}>
-          Start comprehending
+          Start thinking
         </button>
         <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>Free for your first book</p>
       </div>
@@ -157,9 +157,9 @@ export default function AuthPanel({ onLogin, onSignup }: AuthPanelProps) {
         <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 20px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>How it works</p>
 
         {[
-          { num: "1", title: "Upload your book", desc: "PDF or text. The AI reads it and identifies chapters and the key ideas the author argues — not trivia, real concepts." },
-          { num: "2", title: "Write, don't click", desc: "No multiple choice, no flashcard flips. You write your understanding in your own words. The AI reads what you actually wrote and responds to it." },
-          { num: "3", title: "Five phases of pushback", desc: "Clarify, probe, counterargument, application, synthesis. Each phase tests a different angle. You can't shortcut it — understanding is earned, not assumed." },
+          { num: "1", title: "Upload any book", desc: "PDF, EPUB, DOCX, or screenshots. The AI extracts the author's actual arguments — not trivia, the real ideas worth thinking about." },
+          { num: "2", title: "Write, don't click", desc: "No multiple choice. No flashcard flips. You write real answers in your own words. If you parrot the book back at it, the engine catches the overlap and asks you to think instead." },
+          { num: "3", title: "Three-stage critical thinking journey", desc: "Master the idea (Clarify → Probe → Steelman → Apply → Synthesize), then evaluate how it's argued (Toulmin's warrant, evidence, rebuttal), then inspect the reasoning itself (Paul-Elder: purpose, assumptions, viewpoint, inference, consequences). Each stage unlocks when you've earned it." },
         ].map((step, i) => (
           <div key={step.num} style={{ display: "flex", gap: 14, marginBottom: 14 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 24, flexShrink: 0 }}>
@@ -179,32 +179,32 @@ export default function AuthPanel({ onLogin, onSignup }: AuthPanelProps) {
           </div>
           <div style={{ flex: 1, background: "var(--bg-secondary)", borderRadius: 12, padding: "16px 20px" }}>
             <p style={{ fontWeight: 600, margin: "0 0 4px" }}>Retain what you learned</p>
-            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>Spaced repetition brings concepts back at the right time. Struggling? It comes back sooner. Mastered it? It fades until you need a refresh.</p>
+            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>Spaced repetition schedules concepts at the right interval. Once you've mastered ideas in two different chapters, Comprehend surfaces a Connection challenge — one question that can only be answered by relating the two ideas. That's where real critical thinking lives.</p>
           </div>
         </div>
       </div>
 
       {/* Comparison */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 20px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>Not another flashcard app</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 20px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>Built for depth, not speed</p>
         <div className="landing-comparison-grid">
           <div style={{ background: "var(--bg-secondary)", borderRadius: 12, padding: "16px 18px" }}>
-            <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", margin: "0 0 4px" }}>Flashcards test</p>
-            <p style={{ fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>Recall</p>
-            <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "6px 0 0" }}>Can you recognize the answer?</p>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", margin: "0 0 4px" }}>Other tools optimize for</p>
+            <p style={{ fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>Coverage</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "6px 0 0" }}>How many cards can you get through?</p>
           </div>
           <div style={{ background: "var(--bg-secondary)", borderRadius: 12, padding: "16px 18px", border: "2px solid #0d0d0d" }}>
-            <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", margin: "0 0 4px" }}>Comprehend tests</p>
-            <p style={{ fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>Understanding</p>
-            <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "6px 0 0" }}>Can you explain, defend, and apply it?</p>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", margin: "0 0 4px" }}>Comprehend optimizes for</p>
+            <p style={{ fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>Depth</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "6px 0 0" }}>Can you explain, challenge, and use the idea?</p>
           </div>
         </div>
       </div>
 
       {/* CTA + Auth */}
       <div id="auth-section" style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0", textAlign: "center" }}>
-        <h2 className="landing-cta-title">Stop memorizing. Start understanding.</h2>
-        <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", margin: "0 0 28px" }}>Your first two books are free. No credit card required.</p>
+        <h2 className="landing-cta-title">Ideas are only useful if you can think with them.</h2>
+        <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", margin: "0 0 28px" }}>Your first book is free. No credit card required.</p>
         {authForm}
       </div>
 
