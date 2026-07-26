@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { DIMENSION_ORDER, type Dimension, type DialogueAction, type DialogueEngineInput, type DialogueEngineResult } from "../src/types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+const MODEL = process.env.DIALOGUE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-fable-5";
 
 const SYSTEM_PROMPT = `You are a Socratic tutor walking a learner through one concept from a book, across five fixed stages in this exact order: clarify, probe, counterargument, application, synthesis. Each turn, your only job is to decide what happens next and produce the exact text for it. You never grade with a score - you decide one of five actions.
 
@@ -55,6 +55,7 @@ const DIALOGUE_TOOL: Anthropic.Tool = {
           introText: { type: ["string", "null"], description: "Required (non-null) for ask_question only when moving to a new dimension; null otherwise." },
           hintText: { type: "string", description: "Required for give_hint." },
           leadInText: { type: "string", description: "Required for offer_passage - a short sentence introducing the passage before it's shown." },
+          // questionText (defined above) is ALSO required for offer_passage: the fresh re-angled question.
           summaryText: { type: "string", description: "Required for complete_session." },
           supportiveText: { type: "string", description: "Required for mark_incomplete." },
         },
