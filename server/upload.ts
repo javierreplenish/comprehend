@@ -2,6 +2,7 @@ import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
 import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
+import * as XLSX from "xlsx";
 
 // ── Text extraction for every supported upload format ──
 // This module does NOT talk to the AI. It turns an uploaded file into plain
@@ -117,7 +118,6 @@ export async function extractUploadedFile(buffer: Buffer, mimetype: string, file
 // ── Flashcard spreadsheet import (.xlsx / .csv) ──
 // A sheet of ready-made Q&A cards (from any tool) maps straight into the
 // concepts table - no AI call, no cost, instant.
-import * as XLSX from "xlsx";
 
 export interface ImportedFlashcards {
   title: string;
