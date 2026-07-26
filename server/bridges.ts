@@ -3,7 +3,7 @@ import { db } from "./db";
 import { isParroting } from "./textOverlap";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+const MODEL = process.env.DIALOGUE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-fable-5";
 
 // ── Connections: cross-topic transfer challenges ──
 // Mastering ideas one at a time is comprehension. Relating them - seeing
