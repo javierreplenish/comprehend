@@ -234,6 +234,15 @@ export async function respondToBridgeChallenge(bridgeId: number, answerText: str
   return parseOrThrow(res);
 }
 
+
+export interface ProtocolSession { sessionId: number; turnId: number; stage: string; questionText: string; introText: string | null; bloomTier: number; }
+export type ProtocolRespond = { action: "complete"; summaryText: string } | { action: "incomplete"; supportiveText: string } | { action: "continue"; turnId: number; stage: string; questionText: string; introText: string | null };
+export interface TopicProgression { bloomTier: 1 | 2 | 3; mastered: boolean; argumentUnlocked: boolean; auditUnlocked: boolean; argumentCompleted: boolean; auditCompleted: boolean; }
+export async function fetchTopicProgression(topicId: number): Promise<TopicProgression> { const res = await fetch(`/api/topics/${topicId}/progression`, { credentials: "include" }); return parseOrThrow(res); }
+export async function startArgumentSession(topicId: number): Promise<ProtocolSession> { const res = await fetch(`/api/topics/${topicId}/argument/start`, { method: "POST", credentials: "include" }); return parseOrThrow(res); }
+export async function respondToArgumentTurn(sessionId: number, turnId: number, answerText: string): Promise<ProtocolRespond> { const res = await fetch(`/api/argument/${sessionId}/turns/${turnId}/respond`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ answerText }) }); return parseOrThrow(res); }
+export async function startAuditSession(topicId: number): Promise<ProtocolSession> { const res = await fetch(`/api/topics/${topicId}/audit/start`, { method: "POST", credentials: "include" }); return parseOrThrow(res); }
+export async function respondToAuditTurn(sessionId: number, turnId: number, answerText: string): Promise<ProtocolRespond> { const res = await fetch(`/api/audit/${sessionId}/turns/${turnId}/respond`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ answerText }) }); return parseOrThrow(res); }
 export async function createBillingPortalSession(): Promise<{ url: string }> {
   const res = await fetch("/api/billing/portal", { method: "POST", credentials: "include" });
   return parseOrThrow(res);

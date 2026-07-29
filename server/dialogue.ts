@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { DIMENSION_ORDER, type Dimension, type DialogueAction, type DialogueEngineInput, type DialogueEngineResult } from "../src/types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.DIALOGUE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-fable-5";
+const MODEL = process.env.DIALOGUE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
 
 const SYSTEM_PROMPT = `You are a Socratic tutor walking a learner through one concept from a book, across five fixed stages in this exact order: clarify, probe, counterargument, application, synthesis. Each turn, your only job is to decide what happens next and produce the exact text for it. You never grade with a score - you decide one of five actions.
 
