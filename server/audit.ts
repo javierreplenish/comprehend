@@ -4,7 +4,7 @@ import { bloomTierDescription, advancedTier, type BloomTier } from "./bloom";
 import { isParroting } from "./textOverlap";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.DIALOGUE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+const MODEL = process.env.DIALOGUE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 
 // ── Audit Protocol ──
 // Based on Paul-Elder Critical Thinking Framework. Where Argument asks
