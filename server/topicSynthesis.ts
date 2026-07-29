@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.DIALOGUE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+const MODEL = process.env.DIALOGUE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 
 const SYSTEM_PROMPT = `You read a chapter's worth of flashcards - individual question-and-answer fragments a study deck was built from - and surface the actual ideas the author is arguing across them. Flashcards are fragments; your job is synthesis, not summarization of each one.
 
