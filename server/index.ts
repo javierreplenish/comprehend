@@ -10,7 +10,7 @@ import { seedTestContent } from "./seed";
 import { synthesizeTopicsForChapter } from "./topics";
 import { extractUploadedFile, parseFlashcardSpreadsheet } from "./upload";
 import { configureGoogleAuth } from "./googleAuth";
-import { getBookProcessingStatus, resumeInterruptedJobs, startImageProcessingJob, startProcessingJob } from "./processing";
+import { appendJobToBook, findMatchingBook, getBookProcessingStatus, resumeInterruptedJobs, startImageProcessingJob, startProcessingJob } from "./processing";
 import { protocolUnlocked, advancedTier, type BloomTier } from "./bloom";
 import { startArgumentSession, respondToArgumentTurn } from "./argument";
 import { startAuditSession, respondToAuditTurn } from "./audit";
@@ -173,6 +173,28 @@ app.post("/api/dev/seed", requireAuth, (req, res) => {
 // Real upload: accepts a PDF or plain text file, extracts text, uses AI to
 // identify chapters and key concepts, stores everything for the existing
 // study flow. The AI call can take 10-30 seconds depending on document size.
+
+// Pre-flight: check if an extracted title looks like an existing book.
+// Client calls this after text extraction, before kicking off the job.
+app.post("/api/books/check-title", requireAuth, (req, res) => {
+  const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+  if (!title) { res.json({ match: null }); return; }
+  const match = findMatchingBook(req.session.userId!, title);
+  res.json({ match });
+});
+
+// After user confirms "add to existing book", patch the job's book_id.
+app.post("/api/jobs/:jobId/append-to/:bookId", requireAuth, (req, res) => {
+  const jobId = Number(req.params.jobId);
+  const bookId = Number(req.params.bookId);
+  const job = db.prepare("SELECT * FROM processing_jobs WHERE id = ? AND user_id = ?").get(jobId, req.session.userId) as any;
+  const book = db.prepare("SELECT id FROM books WHERE id = ? AND uploaded_by_user_id = ?").get(bookId, req.session.userId) as any;
+  if (!job || !book) { res.status(404).json({ error: "Job or book not found." }); return; }
+  appendJobToBook(jobId, bookId);
+  // Delete the placeholder book that was created for this job
+  db.prepare("DELETE FROM books WHERE id = ? AND id != ?").run(job.book_id, bookId);
+  res.json({ ok: true, bookId });
+});
 
 app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req, res) => {
   try {
