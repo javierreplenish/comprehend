@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AdminDashboard from "./components/AdminDashboard";
 import AuthPanel from "./components/AuthPanel";
+import HBCUPanel from "./components/HBCUPanel";
 import FlashcardLab from "./components/FlashcardLab";
 import Library from "./components/Library";
 import ProfilePage from "./components/ProfilePage";
@@ -36,6 +37,7 @@ export default function App() {
   }
 
   if (!user) {
+    if (window.location.pathname === "/hbcu") return <HBCUPanel onLogin={login} onSignup={signup} />;
     return <AuthPanel onLogin={login} onSignup={signup} />;
   }
 
