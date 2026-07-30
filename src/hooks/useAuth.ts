@@ -18,8 +18,8 @@ export function useAuth() {
     return nextUser;
   }, []);
 
-  const signup = useCallback(async (email: string, password: string) => {
-    const nextUser = await apiSignup(email, password);
+  const signup = useCallback(async (email: string, password: string, displayName?: string) => {
+    const nextUser = await apiSignup(email, password, displayName);
     setUser(nextUser);
     return nextUser;
   }, []);
