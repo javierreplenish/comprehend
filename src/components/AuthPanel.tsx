@@ -145,19 +145,19 @@ export default function AuthPanel({ onLogin, onSignup }: AuthPanelProps) {
         </button>
       </div>
 
-      {/* Hero */}
+      {/* Hero — WHY first */}
       <div style={{ textAlign: "center", padding: "2rem 0 2.5rem" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>The critical thinking engine for serious readers</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>Built for students who want to actually think</p>
         <h1 className="landing-hero-title">
-          Don't just read ideas.<br />Learn to interrogate them.
+          Most students read.<br />Few actually understand.
         </h1>
-        <p style={{ fontSize: "1rem", color: "var(--text-secondary)", margin: "0 auto 28px", maxWidth: 460, lineHeight: 1.7 }}>
-          Comprehend turns any book into a structured critical thinking workout — five Socratic stages that make you explain, probe, steelman, apply, and synthesize every idea before you move on.
+        <p style={{ fontSize: "1rem", color: "var(--text-secondary)", margin: "0 auto 28px", maxWidth: 480, lineHeight: 1.7 }}>
+          We believe understanding is earned, not downloaded. Comprehend exists for students who want to grasp ideas deeply enough to explain them, defend them, and use them — not just remember them long enough for the exam.
         </p>
         <button type="button" className="btn btn--primary btn--large" onClick={() => document.getElementById("auth-section")?.scrollIntoView({ behavior: "smooth" })}>
-          Start thinking
+          Start with your first book — free
         </button>
-        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>Free for your first book</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>No credit card required</p>
       </div>
 
       {/* Product visual */}
@@ -165,36 +165,42 @@ export default function AuthPanel({ onLogin, onSignup }: AuthPanelProps) {
         {phaseDemo}
       </div>
 
-      {/* How it works */}
+      {/* THE PROOF — parroting caught */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 20px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>How it works</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 20px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>What makes it different</p>
+        <div style={{ background: "var(--bg-secondary)", borderRadius: 14, padding: "20px", marginBottom: "1.5rem" }}>
+          <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 12px", fontWeight: 600 }}>Here's what happens when you try to fake it:</p>
+          <div style={{ marginBottom: 10 }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 4px" }}>Comprehend</p>
+            <p style={{ fontSize: "0.85rem", margin: 0, lineHeight: 1.5 }}>In your own words, what is the author's core claim about how power sustains itself?</p>
+          </div>
+          <div style={{ background: "var(--panel)", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 4px" }}>Student</p>
+            <p style={{ fontSize: "0.85rem", margin: 0, lineHeight: 1.5, fontStyle: "italic" }}>"The rulers of any social order must eventually secure the consent of the governed through institutions, ideology, and the shaping of what people believe to be natural."</p>
+          </div>
+          <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: 8, padding: "10px 12px" }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 4px" }}>Comprehend</p>
+            <p style={{ fontSize: "0.85rem", margin: 0, lineHeight: 1.5 }}>That's very close to the book's own wording. How would you explain this idea to someone who's never read it — in your words, from your angle?</p>
+          </div>
+          <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "12px 0 0", textAlign: "center" }}>That's not a bug. That's the point.</p>
+        </div>
 
+        {/* Why → What → How */}
         {[
-          { num: "1", title: "Upload any book", desc: "PDF, EPUB, DOCX, or screenshots. The AI extracts the author's actual arguments — not trivia, the real ideas worth thinking about." },
-          { num: "2", title: "Write, don't click", desc: "No multiple choice. No flashcard flips. You write real answers in your own words. If you parrot the book back at it, the engine catches the overlap and asks you to think instead." },
-          { num: "3", title: "Three-stage critical thinking journey", desc: "Master the idea (Clarify → Probe → Steelman → Apply → Synthesize), then evaluate how it's argued (Toulmin's warrant, evidence, rebuttal), then inspect the reasoning itself (Paul-Elder: purpose, assumptions, viewpoint, inference, consequences). Each stage unlocks when you've earned it." },
-        ].map((step, i) => (
-          <div key={step.num} style={{ display: "flex", gap: 14, marginBottom: 14 }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 24, flexShrink: 0 }}>
-              <span style={{ background: "#0d0d0d", color: "#fff", fontSize: "0.68rem", fontWeight: 600, width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>{step.num}</span>
-              {i < 2 && <span style={{ flex: 1, width: 1, background: "rgba(0,0,0,0.15)", minHeight: 20, marginTop: 6 }} />}
+          { label: "WHY", title: "Reading isn't understanding", desc: "Highlighting, summarizing, and ChatGPT won't tell you whether you actually grasped the idea. Comprehend exists because we believe understanding has to be demonstrated — in your own words, under pressure." },
+          { label: "WHAT", title: "A structured critical thinking workout on every concept", desc: "Upload your book. The AI finds the real arguments. Then five Socratic stages: Clarify the idea, Probe the mechanism, Counter the strongest objection, Apply it somewhere new, Synthesize everything. You don't advance until you've earned it." },
+          { label: "HOW", title: "Write, don't click", desc: "No multiple choice. No flashcard flips. You write real answers and the AI reads what you actually said — checking for genuine reasoning, not keyword matches. If you quote the book, it catches you. If your argument is weak, it narrows the question. If your reasoning is strong, it advances you." },
+        ].map((item) => (
+          <div key={item.label} style={{ display: "flex", gap: 14, marginBottom: 14 }}>
+            <div style={{ width: 36, flexShrink: 0, paddingTop: 2 }}>
+              <span style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.08em", color: "var(--muted)", background: "var(--bg-secondary)", padding: "2px 6px", borderRadius: 4 }}>{item.label}</span>
             </div>
             <div style={{ flex: 1, background: "var(--bg-secondary)", borderRadius: 12, padding: "16px 20px" }}>
-              <p style={{ fontWeight: 600, margin: "0 0 4px" }}>{step.title}</p>
-              <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>{step.desc}</p>
+              <p style={{ fontWeight: 600, margin: "0 0 4px" }}>{item.title}</p>
+              <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>{item.desc}</p>
             </div>
           </div>
         ))}
-
-        <div style={{ display: "flex", gap: 14 }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 24, flexShrink: 0 }}>
-            <span style={{ background: "#10a37f", color: "#fff", fontSize: "0.68rem", fontWeight: 600, width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>✓</span>
-          </div>
-          <div style={{ flex: 1, background: "var(--bg-secondary)", borderRadius: 12, padding: "16px 20px" }}>
-            <p style={{ fontWeight: 600, margin: "0 0 4px" }}>Retain what you learned</p>
-            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>Spaced repetition schedules concepts at the right interval. Once you've mastered ideas in two different chapters, Comprehend surfaces a Connection challenge — one question that can only be answered by relating the two ideas. That's where real critical thinking lives.</p>
-          </div>
-        </div>
       </div>
 
       {/* Comparison */}
