@@ -18,12 +18,12 @@ export async function fetchMe(): Promise<AuthUser | null> {
   return body.user;
 }
 
-export async function signup(email: string, password: string): Promise<AuthUser> {
+export async function signup(email: string, password: string, displayName?: string): Promise<AuthUser> {
   const res = await fetch("/api/auth/signup", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, displayName }),
   });
   const body = await parseOrThrow(res);
   return body.user;
