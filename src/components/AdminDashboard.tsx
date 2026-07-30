@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchAdminStats, type AdminStats } from "../lib/api";
+import { addToLibrary, removeFromLibrary, fetchAdminStats, type AdminStats, type BookSummary } from "../lib/api";
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -9,6 +9,7 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [data, setData] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [libBusy, setLibBusy] = useState<number | null>(null);
 
   useEffect(() => {
     fetchAdminStats()
@@ -86,6 +87,33 @@ export default function AdminDashboard({ onBack }: AdminDashboardProps) {
               <p style={{ fontSize: "0.72rem", color: "var(--text-secondary)", margin: 0 }}>{book.uploaded_by}</p>
               <p style={{ fontSize: "0.68rem", color: "var(--muted)", margin: "2px 0 0" }}>{new Date(book.created_at).toLocaleDateString()}</p>
             </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Liberation Library management */}
+      <div style={{ marginTop: "1.5rem" }}>
+        <p style={{ fontWeight: 600, fontSize: "0.88rem", margin: "0 0 4px" }}>Black Liberation Library</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "0 0 12px", lineHeight: 1.5 }}>
+          Upload a Wilson book normally, then add it here. It becomes free and visible to all users — no quota used.
+        </p>
+        {(data.books as BookSummary[] | undefined)?.map((book: BookSummary) => (
+          <div key={book.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontWeight: 600, fontSize: "0.82rem", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{book.title}</p>
+              {book.isLibraryBook && <span style={{ fontSize: "0.68rem", color: "var(--success)", fontWeight: 600 }}>✓ Black Liberation Library</span>}
+            </div>
+            {book.isLibraryBook ? (
+              <button type="button" className="btn" style={{ fontSize: "0.72rem", flexShrink: 0 }} disabled={libBusy === book.id}
+                onClick={async () => { setLibBusy(book.id); try { await removeFromLibrary(book.id); setData((d: any) => ({ ...d, books: d.books.map((b: BookSummary) => b.id === book.id ? { ...b, isLibraryBook: false } : b) })); } finally { setLibBusy(null); } }}>
+                {libBusy === book.id ? "…" : "Remove"}
+              </button>
+            ) : (
+              <button type="button" className="btn btn--primary" style={{ fontSize: "0.72rem", flexShrink: 0 }} disabled={libBusy === book.id}
+                onClick={async () => { setLibBusy(book.id); try { await addToLibrary(book.id); setData((d: any) => ({ ...d, books: d.books.map((b: BookSummary) => b.id === book.id ? { ...b, isLibraryBook: true, libraryCollection: "black-liberation" } : b) })); } finally { setLibBusy(null); } }}>
+                {libBusy === book.id ? "…" : "Add to library"}
+              </button>
+            )}
           </div>
         ))}
       </div>
