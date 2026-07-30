@@ -57,12 +57,12 @@ export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
           Most students read.<br />Few actually understand.
         </h1>
         <p style={{ fontSize: "1rem", color: "var(--text-secondary)", margin: "0 auto 28px", maxWidth: 480, lineHeight: 1.7 }}>
-          We believe understanding is earned, not downloaded. Comprehend exists for students who want to grasp ideas deeply enough to explain them, defend them, and use them — not just remember them long enough for the exam.
+          We believe understanding is earned, not downloaded. Comprehend exists for students who want to grasp ideas deeply enough to explain them, defend them, and use them — not just remember them long enough for the exam. HBCU students also get free access to the Black Liberation library.
         </p>
         <button type="button" className="btn btn--primary btn--large" onClick={() => document.getElementById("hbcu-auth")?.scrollIntoView({ behavior: "smooth" })}>
           Start with your first book — free
         </button>
-        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>No credit card required</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>No credit card · Black Liberation library included free</p>
       </div>
 
       {/* Parroting proof */}
@@ -105,8 +105,8 @@ export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
 
       {/* Wilson library */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 6px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>Start immediately</p>
-        <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", textAlign: "center", margin: "0 0 16px", lineHeight: 1.5 }}>The Dr. Amos Wilson library is free and ready — no upload needed.</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 6px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>The Black Liberation Library — always free</p>
+        <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", textAlign: "center", margin: "0 0 16px", lineHeight: 1.5 }}>Dr. Amos Wilson's major works are free for every HBCU student — no upload, no payment, just open and study.</p>
         <div style={{ display: "grid", gap: "0.6rem", marginBottom: "1rem" }}>
           {CANON.map((book) => (
             <div key={book.title} style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
