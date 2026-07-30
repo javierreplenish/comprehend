@@ -41,7 +41,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 export async function signup(req: Request, res: Response) {
-  const { email, password } = req.body as { email?: string; password?: string };
+  const { email, password, displayName } = req.body as { email?: string; password?: string; displayName?: string };
   if (!email || !EMAIL_RE.test(email)) {
     res.status(400).json({ error: "Enter a valid email address." });
     return;
@@ -50,13 +50,14 @@ export async function signup(req: Request, res: Response) {
     res.status(400).json({ error: "Password must be at least 8 characters." });
     return;
   }
+  const name = (displayName ?? "").trim().slice(0, 60);
   const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
   if (existing) {
     res.status(409).json({ error: "An account with that email already exists." });
     return;
   }
   const passwordHash = await bcrypt.hash(password, 10);
-  const info = db.prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)").run(email, passwordHash);
+  const info = db.prepare("INSERT INTO users (email, password_hash, display_name) VALUES (?, ?, ?)").run(email, passwordHash, name);
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(info.lastInsertRowid) as UserRow;
   req.session.userId = user.id;
   res.json({ user: publicUser(user) });
