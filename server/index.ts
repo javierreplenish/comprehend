@@ -134,8 +134,11 @@ app.post("/api/auth/profile-pic", requireAuth, profilePicUpload, (req, res) => {
 });
 
 app.get("/api/books", requireAuth, (req, res) => {
-  const books = db.prepare("SELECT * FROM books WHERE uploaded_by_user_id = ? ORDER BY created_at DESC").all(req.session.userId) as Array<{ id: number; title: string; author: string; status: string }>;
-  const enriched = books.map((book) => {
+  const ownBooks = db.prepare("SELECT * FROM books WHERE uploaded_by_user_id = ? ORDER BY created_at DESC").all(req.session.userId) as any[];
+  const ownIds = new Set(ownBooks.map((b: any) => b.id));
+  const libraryBooks = (db.prepare("SELECT * FROM books WHERE is_library_book = 1 AND status = 'ready' ORDER BY created_at ASC").all() as any[]).filter((b: any) => !ownIds.has(b.id));
+  const allBooks = [...ownBooks, ...libraryBooks];
+  const enriched = allBooks.map((book: any) => {
     const stats = db.prepare(
       `SELECT COUNT(t.id) as total,
               SUM(CASE WHEN tp.status = 'mastered' THEN 1 ELSE 0 END) as mastered
@@ -144,7 +147,7 @@ app.get("/api/books", requireAuth, (req, res) => {
        LEFT JOIN topic_progress tp ON tp.topic_id = t.id AND tp.user_id = ?
        WHERE c.book_id = ?`
     ).get(req.session.userId, book.id) as { total: number; mastered: number } | undefined;
-    return { ...book, totalTopics: stats?.total ?? 0, masteredTopics: stats?.mastered ?? 0 };
+    return { ...book, totalTopics: stats?.total ?? 0, masteredTopics: stats?.mastered ?? 0, isLibraryBook: Boolean(book.is_library_book), libraryCollection: book.library_collection ?? null };
   });
   const me = db.prepare("SELECT lifetime_uploads FROM users WHERE id = ?").get(req.session.userId) as { lifetime_uploads: number };
   res.json({ books: enriched, uploadsUsed: me.lifetime_uploads });
@@ -379,6 +382,24 @@ app.get("/api/topics/:topicId/progression", requireAuth, (req, res) => {
   });
 });
 
+// ── Admin: Liberation Library management ──
+app.post("/api/admin/books/:bookId/library", requireAuth, (req, res) => {
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+  const me = db.prepare("SELECT email FROM users WHERE id = ?").get(req.session.userId) as any;
+  if (!me || me.email.trim().toLowerCase() !== adminEmail) { res.status(403).json({ error: "Admin only." }); return; }
+  const col = ((req.body as any)?.collection ?? "black-liberation").toString().trim();
+  db.prepare("UPDATE books SET is_library_book = 1, library_collection = ? WHERE id = ?").run(col, Number(req.params.bookId));
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/books/:bookId/library", requireAuth, (req, res) => {
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+  const me = db.prepare("SELECT email FROM users WHERE id = ?").get(req.session.userId) as any;
+  if (!me || me.email.trim().toLowerCase() !== adminEmail) { res.status(403).json({ error: "Admin only." }); return; }
+  db.prepare("UPDATE books SET is_library_book = 0, library_collection = NULL WHERE id = ?").run(Number(req.params.bookId));
+  res.json({ ok: true });
+});
+
 // ── Per-topic notes ──
 app.get("/api/topics/:topicId/note", requireAuth, (req, res) => {
   const row = db.prepare("SELECT content, updated_at FROM notes WHERE user_id = ? AND topic_id = ?").get(req.session.userId, Number(req.params.topicId)) as { content: string; updated_at: string } | undefined;
@@ -570,11 +591,13 @@ app.get("/api/admin/stats", requireAdmin, (_req, res) => {
 
   const recentUsers = db.prepare("SELECT id, email, display_name, plan, created_at FROM users ORDER BY created_at DESC LIMIT 20").all();
   const recentBooks = db.prepare("SELECT b.id, b.title, b.author, b.created_at, u.email as uploaded_by FROM books b JOIN users u ON u.id = b.uploaded_by_user_id ORDER BY b.created_at DESC LIMIT 20").all();
+  const allBooks = db.prepare("SELECT id, title, author, status, is_library_book, library_collection FROM books WHERE status = 'ready' ORDER BY title ASC").all().map((b: any) => ({ ...b, isLibraryBook: Boolean(b.is_library_book), libraryCollection: b.library_collection ?? null }));
 
   res.json({
     stats: { userCount, proCount, bookCount, chapterCount, topicCount, conceptCount, sessionCount, completedSessions, masteredTopics },
     recentUsers,
     recentBooks,
+    books: allBooks,
   });
 });
 
