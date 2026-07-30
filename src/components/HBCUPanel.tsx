@@ -5,14 +5,15 @@ interface HBCUPanelProps {
   onSignup: (email: string, password: string, displayName?: string) => Promise<unknown>;
 }
 
+// Dr. Amos Wilson's major works — the complete critical thinking library.
+// Each book is processed and ready to study the moment you sign up.
 const CANON = [
-  { title: "The Souls of Black Folk", author: "W.E.B. Du Bois" },
-  { title: "The Wretched of the Earth", author: "Frantz Fanon" },
-  { title: "The Fire Next Time", author: "James Baldwin" },
-  { title: "Ain't I a Woman", author: "bell hooks" },
-  { title: "The New Jim Crow", author: "Michelle Alexander" },
-  { title: "Black Power", author: "Kwame Ture & Charles Hamilton" },
-  { title: "Blueprint for Black Power", author: "Amos Wilson" },
+  { title: "Blueprint for Black Power", author: "Dr. Amos Wilson" },
+  { title: "The Falsification of Afrikan Consciousness", author: "Dr. Amos Wilson" },
+  { title: "Black-on-Black Violence", author: "Dr. Amos Wilson" },
+  { title: "Afrikan-Centered Consciousness Versus the New World Order", author: "Dr. Amos Wilson" },
+  { title: "The Developmental Psychology of the Black Child", author: "Dr. Amos Wilson" },
+  { title: "Awakening the Natural Genius of Black Children", author: "Dr. Amos Wilson" },
 ];
 
 export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
@@ -51,22 +52,22 @@ export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
 
       {/* Hero */}
       <div style={{ textAlign: "center", padding: "2rem 0 2.5rem" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>For students who study the movement</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>The Dr. Amos Wilson Critical Thinking Library</p>
         <h1 className="landing-hero-title">
-          The ideas that shaped the world<br />deserve more than a summary.
+          Dr. Amos Wilson didn't write<br />for you to summarize and forget.
         </h1>
         <p style={{ fontSize: "1rem", color: "var(--text-secondary)", margin: "0 auto 28px", maxWidth: 480, lineHeight: 1.7 }}>
-          Du Bois didn't write for you to highlight and move on. Comprehend helps you think through the concepts in the books that matter — until you can explain them, challenge them, and apply them to the world in front of you right now.
+          His work demands that you think — about power, consciousness, and how ideas become action. Comprehend turns every concept in his books into a structured critical thinking workout, until you can explain it, challenge it, and use it.
         </p>
         <button type="button" className="btn btn--primary btn--large" onClick={() => document.getElementById("hbcu-auth")?.scrollIntoView({ behavior: "smooth" })}>
-          Start with the library — free
+          Study Dr. Amos Wilson — free
         </button>
         <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>No credit card required</p>
       </div>
 
       {/* The canon */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 16px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>Start studying immediately</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 16px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>The complete Dr. Amos Wilson library — free</p>
         <div style={{ display: "grid", gap: "0.6rem", marginBottom: "1.5rem" }}>
           {CANON.map((book) => (
             <div key={book.title} style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -79,14 +80,14 @@ export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
           ))}
         </div>
         <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", textAlign: "center", lineHeight: 1.6 }}>
-          Upload your own syllabi reading too — any PDF, EPUB, or screenshots of pages.
+          Upload your own reading too — any PDF, EPUB, or screenshots of pages. The Wilson library is always free.
         </p>
       </div>
 
       {/* Why → What → How */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
         {[
-          { label: "WHY", title: "Understanding is how ideas become power", desc: "Every movement that changed anything was built by people who could explain an idea, defend it against the sharpest objection, and apply it to new ground. That's not a skill you get from reading. It's a skill you get from thinking." },
+          { label: "WHY", title: "Dr. Wilson wrote to develop minds, not just inform them", desc: "His work isn't meant to be absorbed — it's meant to be used. Understanding Black psychology, power, and consciousness at the level he demands requires the ability to explain ideas, stress-test them, and apply them to real conditions. That's exactly what Comprehend trains." },
           { label: "WHAT", title: "A structured dialogue on every concept in your reading", desc: "Comprehend finds the ideas that actually matter in your assigned texts. Then it walks you through each one: explain it in your own words, probe what's underneath it, steelman the counterargument, apply it to something real, synthesize what you learned." },
           { label: "HOW", title: "You write. The AI reads what you actually said.", desc: "No multiple choice. No highlighting. You write real answers and the engine judges whether you're thinking or just reciting. If you quote the text back at it, it catches the overlap and asks you to think. If your reasoning holds, you advance." },
         ].map((item) => (
