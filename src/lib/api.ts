@@ -7,6 +7,8 @@ export interface BookSummary {
   status: "processing" | "ready" | "failed";
   totalTopics: number;
   masteredTopics: number;
+  isLibraryBook?: boolean;
+  libraryCollection?: string | null;
 }
 
 export interface ChapterSummary {
@@ -207,6 +209,7 @@ export interface AdminStats {
   };
   recentUsers: Array<{ id: number; email: string; display_name: string; plan: string; created_at: string }>;
   recentBooks: Array<{ id: number; title: string; author: string; created_at: string; uploaded_by: string }>;
+  books?: BookSummary[];
 }
 
 export interface BridgeStart { bridgeId: number; turnId: number; attemptNumber: number; questionText: string; topicA: string; topicB: string; }
@@ -304,6 +307,19 @@ export async function checkBookTitle(title: string): Promise<{ match: { id: numb
 export async function appendJobToBook(jobId: number, bookId: number): Promise<{ bookId: number }> {
   const res = await fetch(`/api/jobs/${jobId}/append-to/${bookId}`, { method: "POST", credentials: "include" });
   return parseOrThrow(res);
+}
+
+export async function addToLibrary(bookId: number, collection = "black-liberation"): Promise<void> {
+  const res = await fetch(`/api/admin/books/${bookId}/library`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+    body: JSON.stringify({ collection }),
+  });
+  await parseOrThrow(res);
+}
+
+export async function removeFromLibrary(bookId: number): Promise<void> {
+  const res = await fetch(`/api/admin/books/${bookId}/library`, { method: "DELETE", credentials: "include" });
+  await parseOrThrow(res);
 }
 
 export async function createBillingPortalSession(): Promise<{ url: string }> {
