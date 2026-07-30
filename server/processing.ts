@@ -75,12 +75,13 @@ interface ChunkResult {
 // The model is TOLD the schema, but at ~55 calls per long book it will
 // occasionally return chapters as an object map, a nested wrapper, or with
 // missing fields. Never trust the shape - coerce what's coercible, reject
-// the rest, and let the caller retry with a correction.
+// the rest, and let the caller retry with a correction. Returns null when
+// nothing usable came back.
 function normalizeChunkResult(input: any): ChunkResult | null {
   if (!input || typeof input !== "object") return null;
   let chapters: any = input.chapters;
   if (chapters && !Array.isArray(chapters) && typeof chapters === "object") {
-    chapters = Object.values(chapters);
+    chapters = Object.values(chapters); // object-map variant: { "0": {...}, "1": {...} }
   }
   if (!Array.isArray(chapters)) return null;
   const cleaned = chapters
@@ -216,6 +217,30 @@ function normalizeTitle(t: string): string {
 // rebuilds it from the processing_jobs table on boot.
 const queue: number[] = [];
 let running = false;
+
+// ── Fuzzy title similarity (token overlap, 0–1) ──
+// Fast, zero-cost alternative to edit distance for titles.
+// "Capital in the 21st Century Part 2" vs "Capital in the 21st Century" → ~0.8
+function titleSimilarity(a: string, b: string): number {
+  const tok = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length > 2));
+  const ta = tok(a); const tb = tok(b);
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let hits = 0;
+  for (const t of ta) if (tb.has(t)) hits++;
+  return hits / Math.max(ta.size, tb.size);
+}
+
+// Returns an existing book that looks like the same title, or null.
+// Called before creating a new book so the client can prompt the user.
+export function findMatchingBook(userId: number, provisionalTitle: string): { id: number; title: string; similarity: number } | null {
+  const books = db.prepare("SELECT id, title FROM books WHERE uploaded_by_user_id = ? AND status = 'ready'").all(userId) as Array<{ id: number; title: string }>;
+  let best: { id: number; title: string; similarity: number } | null = null;
+  for (const book of books) {
+    const sim = titleSimilarity(provisionalTitle, book.title);
+    if (sim >= 0.65 && (!best || sim > best.similarity)) best = { ...book, similarity: sim };
+  }
+  return best;
+}
 
 export function startProcessingJob(userId: number, rawText: string, originalFilename: string): { bookId: number; jobId: number; chunksTotal: number } {
   const chunks = chunkText(rawText);
@@ -383,6 +408,16 @@ async function runJob(jobId: number): Promise<void> {
 // Called once on server boot: any job that was queued or mid-run when the
 // process died still has its raw text in SQLite - re-enqueue it and it picks
 // up from the last completed chunk.
+// Append chapters from a completed processing job into an existing book.
+// Called when the user confirms "add to existing book".
+// The job's raw text is re-chunked and structured as normal; chapters land
+// under the target book with order_index continuing from where it left off.
+export function appendJobToBook(jobId: number, targetBookId: number): void {
+  db.prepare("UPDATE processing_jobs SET book_id = ? WHERE id = ?").run(targetBookId, jobId);
+  // The job will process normally — persistChunk already merges CONTINUATION
+  // chapters, so chapters appended to an existing book integrate cleanly.
+}
+
 export function resumeInterruptedJobs(): void {
   const interrupted = db.prepare("SELECT id FROM processing_jobs WHERE status IN ('queued', 'running')").all() as Array<{ id: number }>;
   if (interrupted.length === 0) return;
