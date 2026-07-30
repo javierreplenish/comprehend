@@ -9,7 +9,11 @@ import { getDueTopics, respondToTurn, startSession } from "./sessions";
 import { seedTestContent } from "./seed";
 import { synthesizeTopicsForChapter } from "./topics";
 import { extractUploadedFile, parseFlashcardSpreadsheet } from "./upload";
+import { configureGoogleAuth } from "./googleAuth";
 import { getBookProcessingStatus, resumeInterruptedJobs, startImageProcessingJob, startProcessingJob } from "./processing";
+import { protocolUnlocked, advancedTier, type BloomTier } from "./bloom";
+import { startArgumentSession, respondToArgumentTurn } from "./argument";
+import { startAuditSession, respondToAuditTurn } from "./audit";
 import { bridgeEligibility, respondToBridge, startBridge } from "./bridges";
 import multer from "multer";
 import Stripe from "stripe";
@@ -18,7 +22,6 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 const app = express();
-app.set("trust proxy", 1);
 
 app.use(cors({
   origin: process.env.NODE_ENV === "production" ? true : (process.env.CLIENT_ORIGIN ?? "http://localhost:5173"),
@@ -80,8 +83,7 @@ app.use(
     secret: process.env.SESSION_SECRET ?? "dev-only-insecure-secret",
     resave: false,
     saveUninitialized: false,
-    rolling: true, // every visit renews the clock - active users are never logged out
-    cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 60 * 60 * 24 * 60 },
+    cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 60 * 60 * 24 * 30 },
   }),
 );
 
@@ -148,7 +150,8 @@ app.get("/api/books", requireAuth, (req, res) => {
   res.json({ books: enriched, uploadsUsed: me.lifetime_uploads });
 });
 
-// Delete a book and everything under it. Deliberately does NOT decrement
+// Delete a book and everything under it (chapters, concepts, topics, progress,
+// sessions - foreign keys cascade). Deliberately does NOT decrement
 // lifetime_uploads: the free allowance is spent on upload, not on possession.
 app.delete("/api/books/:bookId", requireAuth, (req, res) => {
   const book = db.prepare("SELECT id, uploaded_by_user_id FROM books WHERE id = ?").get(Number(req.params.bookId)) as { id: number; uploaded_by_user_id: number } | undefined;
@@ -179,6 +182,8 @@ app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req,
       return;
     }
 
+    // Enforce the free-tier book limit server-side - the Library UI hides the
+    // upload button, but the API must be the real gate.
     // The wall counts LIFETIME uploads, not current library size - deleting a
     // book tidies the library but never refunds the free upload.
     const uploader = db.prepare("SELECT email, plan, lifetime_uploads FROM users WHERE id = ?").get(req.session.userId) as { email: string; plan: string; lifetime_uploads: number };
@@ -286,6 +291,70 @@ app.post("/api/bridges/:bridgeId/respond", requireAuth, async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Could not judge the answer." });
   }
+});
+
+// ── Argument protocol ──
+app.post("/api/topics/:topicId/argument/start", requireAuth, async (req, res) => {
+  try {
+    res.json(await startArgumentSession(req.session.userId!, Number(req.params.topicId)));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not start the Argument session." });
+  }
+});
+
+app.post("/api/argument/:sessionId/turns/:turnId/respond", requireAuth, async (req, res) => {
+  try {
+    const answer = typeof req.body?.answerText === "string" ? req.body.answerText : "";
+    if (!answer.trim()) { res.status(400).json({ error: "Write an answer first." }); return; }
+    res.json(await respondToArgumentTurn(req.session.userId!, Number(req.params.sessionId), Number(req.params.turnId), answer));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not process the answer." });
+  }
+});
+
+// ── Audit protocol ──
+app.post("/api/topics/:topicId/audit/start", requireAuth, async (req, res) => {
+  try {
+    res.json(await startAuditSession(req.session.userId!, Number(req.params.topicId)));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not start the Audit session." });
+  }
+});
+
+app.post("/api/audit/:sessionId/turns/:turnId/respond", requireAuth, async (req, res) => {
+  try {
+    const answer = typeof req.body?.answerText === "string" ? req.body.answerText : "";
+    if (!answer.trim()) { res.status(400).json({ error: "Write an answer first." }); return; }
+    res.json(await respondToAuditTurn(req.session.userId!, Number(req.params.sessionId), Number(req.params.turnId), answer));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not process the answer." });
+  }
+});
+
+// ── Topic-level progression status ──
+// Returns the learner's Bloom tier and which protocols are available for this topic.
+// The client uses this to show/hide Argument and Audit cards in the Session view.
+app.get("/api/topics/:topicId/progression", requireAuth, (req, res) => {
+  const topicId = Number(req.params.topicId);
+  const progress = db.prepare("SELECT bloom_tier, status FROM topic_progress WHERE user_id = ? AND topic_id = ?").get(req.session.userId, topicId) as any;
+  const bloomTier: BloomTier = (progress?.bloom_tier ?? 1) as BloomTier;
+  const mastered = progress?.status === "mastered";
+
+  const argumentCompleted = (db.prepare(
+    "SELECT COUNT(*) as n FROM argument_sessions WHERE user_id = ? AND topic_id = ? AND status = 'completed'"
+  ).get(req.session.userId, topicId) as any).n > 0;
+  const auditCompleted = (db.prepare(
+    "SELECT COUNT(*) as n FROM audit_sessions WHERE user_id = ? AND topic_id = ? AND status = 'completed'"
+  ).get(req.session.userId, topicId) as any).n > 0;
+
+  res.json({
+    bloomTier,
+    mastered,
+    argumentUnlocked: protocolUnlocked(bloomTier, "argument"),
+    auditUnlocked: protocolUnlocked(bloomTier, "audit"),
+    argumentCompleted,
+    auditCompleted,
+  });
 });
 
 // ── Per-topic notes ──
@@ -462,7 +531,7 @@ app.post("/api/billing/portal", requireAuth, async (req, res) => {
 function requireAdmin(req: any, res: any, next: any) {
   if (!req.session.userId) { res.status(401).json({ error: "Sign in required." }); return; }
   const user = db.prepare("SELECT email FROM users WHERE id = ?").get(req.session.userId) as { email: string } | undefined;
-  if (!user || user.email.trim().toLowerCase() !== ADMIN_EMAIL.trim().toLowerCase()) { res.status(403).json({ error: "Not authorized." }); return; }
+  if (!user || user.email !== ADMIN_EMAIL) { res.status(403).json({ error: "Not authorized." }); return; }
   next();
 }
 
@@ -501,6 +570,7 @@ if (process.env.NODE_ENV === "production") {
 
 // Any upload that was mid-processing when the last process died (deploy,
 // crash, Render restart) picks up from its last completed chunk.
+configureGoogleAuth(app);
 resumeInterruptedJobs();
 
 app.listen(port, () => {
