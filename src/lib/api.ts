@@ -293,6 +293,19 @@ export async function respondToAuditTurn(sessionId: number, turnId: number, answ
   return parseOrThrow(res);
 }
 
+export async function checkBookTitle(title: string): Promise<{ match: { id: number; title: string; similarity: number } | null }> {
+  const res = await fetch("/api/books/check-title", {
+    method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+    body: JSON.stringify({ title }),
+  });
+  return parseOrThrow(res);
+}
+
+export async function appendJobToBook(jobId: number, bookId: number): Promise<{ bookId: number }> {
+  const res = await fetch(`/api/jobs/${jobId}/append-to/${bookId}`, { method: "POST", credentials: "include" });
+  return parseOrThrow(res);
+}
+
 export async function createBillingPortalSession(): Promise<{ url: string }> {
   const res = await fetch("/api/billing/portal", { method: "POST", credentials: "include" });
   return parseOrThrow(res);
