@@ -50,19 +50,19 @@ export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
         </button>
       </div>
 
-      {/* Hero */}
-      <div style={{ textAlign: "center", padding: "2rem 0 2.5rem" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>The Dr. Amos Wilson Critical Thinking Library</p>
+      {/* WHO — speak directly to the right person first */}
+      <div style={{ textAlign: "center", padding: "2rem 0 1.5rem" }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>For HBCU students and scholars of Black political thought</p>
         <h1 className="landing-hero-title">
-          Dr. Amos Wilson didn't write<br />for you to summarize and forget.
+          This is built for you<br />if you study Dr. Amos Wilson.
         </h1>
         <p style={{ fontSize: "1rem", color: "var(--text-secondary)", margin: "0 auto 28px", maxWidth: 480, lineHeight: 1.7 }}>
-          His work demands that you think — about power, consciousness, and how ideas become action. Comprehend turns every concept in his books into a structured critical thinking workout, until you can explain it, challenge it, and use it.
+          If you're at an HBCU, in a Pan-African studies program, or studying Black psychology and liberation — you already know Wilson's work demands more than reading. It demands thinking. This is the tool built for that.
         </p>
         <button type="button" className="btn btn--primary btn--large" onClick={() => document.getElementById("hbcu-auth")?.scrollIntoView({ behavior: "smooth" })}>
           Study Dr. Amos Wilson — free
         </button>
-        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>No credit card required</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>No credit card. No trial. Just the library.</p>
       </div>
 
       {/* The canon */}
@@ -87,9 +87,10 @@ export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
       {/* Why → What → How */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
         {[
-          { label: "WHY", title: "Dr. Wilson wrote to develop minds, not just inform them", desc: "His work isn't meant to be absorbed — it's meant to be used. Understanding Black psychology, power, and consciousness at the level he demands requires the ability to explain ideas, stress-test them, and apply them to real conditions. That's exactly what Comprehend trains." },
-          { label: "WHAT", title: "A structured dialogue on every concept in your reading", desc: "Comprehend finds the ideas that actually matter in your assigned texts. Then it walks you through each one: explain it in your own words, probe what's underneath it, steelman the counterargument, apply it to something real, synthesize what you learned." },
-          { label: "HOW", title: "You write. The AI reads what you actually said.", desc: "No multiple choice. No highlighting. You write real answers and the engine judges whether you're thinking or just reciting. If you quote the text back at it, it catches the overlap and asks you to think. If your reasoning holds, you advance." },
+          { label: "WHO", title: "Built for students who take Wilson seriously", desc: "If you've ever sat with Blueprint for Black Power and felt the weight of what it demands — not just to know it, but to think with it — this is for you. HBCU students, Pan-African scholars, anyone who believes understanding Black power means being able to argue it, not just recite it." },
+          { label: "WHY", title: "Wilson's work was never meant to be summarized", desc: "He wrote to develop a quality of mind capable of navigating power. That kind of development doesn't happen through reading or highlighting. It happens through the struggle of explaining an idea under pressure, steelmanning the opposition, and applying the concept to conditions Wilson never named. That's what Comprehend puts you through." },
+          { label: "WHAT", title: "Six of his major works, free, structured for critical study", desc: "Blueprint for Black Power. The Falsification of Afrikan Consciousness. Black-on-Black Violence. The Developmental Psychology of the Black Child. Awakening the Natural Genius of Black Children. Afrikan-Centered Consciousness Versus the New World Order. Every key concept in each book broken down and ready to study — no upload required." },
+          { label: "HOW", title: "You write. The AI reads what you actually said.", desc: "No multiple choice. No flashcard flips. You write real answers in your own words and the engine judges whether you're thinking or reciting. If you quote Wilson back at it, it catches the overlap and asks you to think. If your reasoning holds, you advance. Every concept. Every chapter." },
         ].map((item) => (
           <div key={item.label} style={{ display: "flex", gap: 14, marginBottom: 14 }}>
             <div style={{ width: 36, flexShrink: 0, paddingTop: 2 }}>
