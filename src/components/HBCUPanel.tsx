@@ -50,47 +50,46 @@ export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
         </button>
       </div>
 
-      {/* WHO — speak directly to the right person first */}
-      <div style={{ textAlign: "center", padding: "2rem 0 1.5rem" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>For HBCU students and scholars of Black political thought</p>
+      {/* Hero — WHO first, then WHY */}
+      <div style={{ textAlign: "center", padding: "2rem 0 2.5rem" }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 12px", letterSpacing: "0.06em", textTransform: "uppercase" }}>For HBCU students who want to actually think</p>
         <h1 className="landing-hero-title">
-          This is built for you<br />if you study Dr. Amos Wilson.
+          Most students read.<br />Few actually understand.
         </h1>
         <p style={{ fontSize: "1rem", color: "var(--text-secondary)", margin: "0 auto 28px", maxWidth: 480, lineHeight: 1.7 }}>
-          If you're at an HBCU, in a Pan-African studies program, or studying Black psychology and liberation — you already know Wilson's work demands more than reading. It demands thinking. This is the tool built for that.
+          We believe understanding is earned, not downloaded. Comprehend exists for students who want to grasp ideas deeply enough to explain them, defend them, and use them — not just remember them long enough for the exam.
         </p>
         <button type="button" className="btn btn--primary btn--large" onClick={() => document.getElementById("hbcu-auth")?.scrollIntoView({ behavior: "smooth" })}>
-          Study Dr. Amos Wilson — free
+          Start with your first book — free
         </button>
-        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>No credit card. No trial. Just the library.</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "12px 0 0" }}>No credit card required</p>
       </div>
 
-      {/* The canon */}
+      {/* Parroting proof */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 16px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>The complete Dr. Amos Wilson library — free</p>
-        <div style={{ display: "grid", gap: "0.6rem", marginBottom: "1.5rem" }}>
-          {CANON.map((book) => (
-            <div key={book.title} style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div>
-                <p style={{ fontWeight: 600, fontSize: "0.88rem", margin: "0 0 2px" }}>{book.title}</p>
-                <p style={{ fontSize: "0.75rem", color: "var(--muted)", margin: 0 }}>{book.author}</p>
-              </div>
-              <span style={{ fontSize: "0.68rem", color: "var(--success)", fontWeight: 600, background: "var(--success-soft)", padding: "2px 8px", borderRadius: 20, flexShrink: 0 }}>Ready</span>
-            </div>
-          ))}
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 20px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>What makes it different</p>
+        <div style={{ background: "var(--bg-secondary)", borderRadius: 14, padding: "20px", marginBottom: "1.5rem" }}>
+          <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 12px", fontWeight: 600 }}>Here's what happens when you try to fake it:</p>
+          <div style={{ marginBottom: 10 }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 4px" }}>Comprehend</p>
+            <p style={{ fontSize: "0.85rem", margin: 0, lineHeight: 1.5 }}>In your own words, what is Wilson's core argument about why Black people must control their own institutions?</p>
+          </div>
+          <div style={{ background: "var(--panel)", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 4px" }}>Student</p>
+            <p style={{ fontSize: "0.85rem", margin: 0, lineHeight: 1.5, fontStyle: "italic" }}>"Those who control the socialization of a child control the child, and those who control the child control the future."</p>
+          </div>
+          <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: 8, padding: "10px 12px" }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "0 0 4px" }}>Comprehend</p>
+            <p style={{ fontSize: "0.85rem", margin: 0, lineHeight: 1.5 }}>That's Wilson's exact wording. What does that argument actually mean — in your words, from your angle?</p>
+          </div>
+          <p style={{ fontSize: "0.72rem", color: "var(--muted)", margin: "12px 0 0", textAlign: "center" }}>That's not a bug. That's the point.</p>
         </div>
-        <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", textAlign: "center", lineHeight: 1.6 }}>
-          Upload your own reading too — any PDF, EPUB, or screenshots of pages. The Wilson library is always free.
-        </p>
-      </div>
 
-      {/* Why → What → How */}
-      <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
+        {/* Why → What → How */}
         {[
-          { label: "WHO", title: "Built for students who take Wilson seriously", desc: "If you've ever sat with Blueprint for Black Power and felt the weight of what it demands — not just to know it, but to think with it — this is for you. HBCU students, Pan-African scholars, anyone who believes understanding Black power means being able to argue it, not just recite it." },
-          { label: "WHY", title: "Wilson's work was never meant to be summarized", desc: "He wrote to develop a quality of mind capable of navigating power. That kind of development doesn't happen through reading or highlighting. It happens through the struggle of explaining an idea under pressure, steelmanning the opposition, and applying the concept to conditions Wilson never named. That's what Comprehend puts you through." },
-          { label: "WHAT", title: "Six of his major works, free, structured for critical study", desc: "Blueprint for Black Power. The Falsification of Afrikan Consciousness. Black-on-Black Violence. The Developmental Psychology of the Black Child. Awakening the Natural Genius of Black Children. Afrikan-Centered Consciousness Versus the New World Order. Every key concept in each book broken down and ready to study — no upload required." },
-          { label: "HOW", title: "You write. The AI reads what you actually said.", desc: "No multiple choice. No flashcard flips. You write real answers in your own words and the engine judges whether you're thinking or reciting. If you quote Wilson back at it, it catches the overlap and asks you to think. If your reasoning holds, you advance. Every concept. Every chapter." },
+          { label: "WHY", title: "Reading isn't understanding", desc: "Highlighting, summarizing, and AI won't tell you whether you actually grasped the idea. Comprehend exists because we believe understanding has to be demonstrated — in your own words, under pressure." },
+          { label: "WHAT", title: "A structured critical thinking workout on every concept", desc: "Upload your assigned reading — or start immediately with the Dr. Amos Wilson library, free. The AI finds the real arguments. Then five Socratic stages: Clarify the idea, Probe the mechanism, Counter the strongest objection, Apply it somewhere new, Synthesize everything. You don't advance until you've earned it." },
+          { label: "HOW", title: "Write, don't click", desc: "No multiple choice. No flashcard flips. You write real answers and the AI reads what you actually said — checking for genuine reasoning, not keyword matches. If you quote the book, it catches you. If your argument is weak, it narrows the question. If your reasoning is strong, it advances you." },
         ].map((item) => (
           <div key={item.label} style={{ display: "flex", gap: 14, marginBottom: 14 }}>
             <div style={{ width: 36, flexShrink: 0, paddingTop: 2 }}>
@@ -104,13 +103,31 @@ export default function HBCUPanel({ onLogin, onSignup }: HBCUPanelProps) {
         ))}
       </div>
 
+      {/* Wilson library */}
+      <div style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 6px", textAlign: "center", letterSpacing: "0.06em", textTransform: "uppercase" }}>Start immediately</p>
+        <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", textAlign: "center", margin: "0 0 16px", lineHeight: 1.5 }}>The Dr. Amos Wilson library is free and ready — no upload needed.</p>
+        <div style={{ display: "grid", gap: "0.6rem", marginBottom: "1rem" }}>
+          {CANON.map((book) => (
+            <div key={book.title} style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <p style={{ fontWeight: 600, fontSize: "0.88rem", margin: "0 0 2px" }}>{book.title}</p>
+                <p style={{ fontSize: "0.75rem", color: "var(--muted)", margin: 0 }}>{book.author}</p>
+              </div>
+              <span style={{ fontSize: "0.68rem", color: "var(--success)", fontWeight: 600, background: "var(--success-soft)", padding: "2px 8px", borderRadius: 20, flexShrink: 0 }}>Free</span>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: "0.78rem", color: "var(--muted)", textAlign: "center" }}>Or upload any book from your syllabus — PDF, EPUB, or screenshots.</p>
+      </div>
+
       {/* Auth form */}
       <div id="hbcu-auth" style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
         <p style={{ textAlign: "center", fontWeight: 600, fontSize: "1.1rem", margin: "0 0 6px" }}>
-          {mode === "signup" ? "Start studying" : "Welcome back"}
+          {mode === "signup" ? "Create your account" : "Welcome back"}
         </p>
         <p style={{ textAlign: "center", fontSize: "0.85rem", color: "var(--text-secondary)", margin: "0 0 20px" }}>
-          {mode === "signup" ? "Your first book is free." : "Sign in to continue."}
+          {mode === "signup" ? "Your first book is free. No credit card." : "Sign in to continue."}
         </p>
         <div style={{ width: "100%", maxWidth: 380, margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
           {mode === "signup" && (
