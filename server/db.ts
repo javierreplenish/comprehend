@@ -2,8 +2,6 @@ import Database from "better-sqlite3";
 import path from "node:path";
 
 const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), "data.db");
-import fs from "node:fs";
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
@@ -99,6 +97,8 @@ db.exec(`
     author TEXT,
     status TEXT NOT NULL DEFAULT 'processing', -- processing | ready | failed
     uploaded_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    is_library_book INTEGER NOT NULL DEFAULT 0, -- 1 = Black Liberation Library (free for all HBCU users, no quota)
+    library_collection TEXT,                    -- e.g. 'black-liberation'
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -175,6 +175,54 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_sessions_user_topic ON dialogue_sessions(user_id, topic_id);
 
+  -- Extended session tables for Argument and Audit protocols.
+  -- dialogue_sessions already covers Mastery; protocol field extends it.
+  CREATE TABLE IF NOT EXISTS argument_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'in_progress', -- in_progress | completed | incomplete
+    bloom_tier INTEGER NOT NULL DEFAULT 1,       -- 1=understand 2=analyze 3=evaluate
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ended_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_arg_sessions_user_topic ON argument_sessions(user_id, topic_id);
+
+  CREATE TABLE IF NOT EXISTS argument_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES argument_sessions(id) ON DELETE CASCADE,
+    stage TEXT NOT NULL, -- claim | grounds | warrant | backing | qualifier | rebuttal
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    question_text TEXT NOT NULL,
+    answer_text TEXT,
+    verdict TEXT,       -- advance | narrow | incomplete | null while unanswered
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_arg_turns_session ON argument_turns(session_id);
+
+  CREATE TABLE IF NOT EXISTS audit_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'in_progress',
+    bloom_tier INTEGER NOT NULL DEFAULT 1,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ended_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_sessions_user_topic ON audit_sessions(user_id, topic_id);
+
+  CREATE TABLE IF NOT EXISTS audit_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES audit_sessions(id) ON DELETE CASCADE,
+    stage TEXT NOT NULL, -- purpose | question | assumptions | viewpoint | evidence | inference | consequences
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    question_text TEXT NOT NULL,
+    answer_text TEXT,
+    verdict TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_turns_session ON audit_turns(session_id);
+
   CREATE TABLE IF NOT EXISTS dialogue_turns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL REFERENCES dialogue_sessions(id) ON DELETE CASCADE,
@@ -202,7 +250,20 @@ db.exec(`
 // ── Migrations for databases created before these columns existed ──
 // CREATE TABLE IF NOT EXISTS never alters existing tables, so additive
 // changes go here. Safe to run on every boot.
+const bookColumns = db.prepare("PRAGMA table_info(books)").all() as Array<{ name: string }>;
+if (!bookColumns.some((c) => c.name === "is_library_book")) {
+  db.exec("ALTER TABLE books ADD COLUMN is_library_book INTEGER NOT NULL DEFAULT 0");
+  db.exec("ALTER TABLE books ADD COLUMN library_collection TEXT");
+}
+
 const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+const progressColumns = db.prepare("PRAGMA table_info(topic_progress)").all() as Array<{ name: string }>;
+if (!progressColumns.some((c) => c.name === "bloom_tier")) {
+  db.exec("ALTER TABLE topic_progress ADD COLUMN bloom_tier INTEGER NOT NULL DEFAULT 1");
+  // Users who already mastered topics start at tier 2 (Argument) — they've earned it.
+  db.exec("UPDATE topic_progress SET bloom_tier = 2 WHERE status = 'mastered'");
+}
+
 if (!userColumns.some((c) => c.name === "lifetime_uploads")) {
   db.exec("ALTER TABLE users ADD COLUMN lifetime_uploads INTEGER NOT NULL DEFAULT 0");
   // Existing users start with their current book count - deleting never refunds.
