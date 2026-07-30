@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { deleteBook, fetchBooks, fetchBookStatus, uploadBook, createCheckoutSession, type BookProcessingStatus, type BookSummary } from "../lib/api";
+import { appendJobToBook, checkBookTitle, deleteBook, fetchBooks, fetchBookStatus, uploadBook, createCheckoutSession, type BookProcessingStatus, type BookSummary } from "../lib/api";
 
 function formatEta(seconds: number | null): string {
   if (seconds === null) return "";
@@ -88,7 +88,20 @@ export default function Library({ onOpenBook, userPlan }: LibraryProps) {
     setUploading(true);
     setError(null);
     try {
-      await uploadBook(files);
+      const result = await uploadBook(files);
+      // Check if this looks like a fragment of an existing book
+      if (result.chunksTotal > 0 && result.jobId) {
+        const titleCheck = await checkBookTitle(files[0].name.replace(/\.(pdf|epub|docx|txt|md)$/i, ""));
+        if (titleCheck.match) {
+          const pct = Math.round(titleCheck.match.similarity * 100);
+          const confirmed = window.confirm(
+            `This looks like it might be part of "${titleCheck.match.title}" (${pct}% match).\n\nAdd these chapters to that book instead of creating a new one?`
+          );
+          if (confirmed) {
+            await appendJobToBook(result.jobId, titleCheck.match.id);
+          }
+        }
+      }
       load(); // book appears immediately as "processing" - polling takes it from here
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
