@@ -3,7 +3,9 @@ import "dotenv/config";
 import express from "express";
 import session from "express-session";
 import SqliteStoreFactory from "better-sqlite3-session-store";
-import { effectivePlan, login, logout, me, publicUser, requireAuth, signup } from "./auth";
+import bcryptjs from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { effectivePlan, publicUser, requireAuth, signup } from "./auth";
 import { db } from "./db";
 import { getDueTopics, respondToTurn, startSession } from "./sessions";
 import { seedTestContent } from "./seed";
@@ -67,6 +69,32 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
 
 app.use(express.json({ limit: "1mb" }));
 
+const JWT_SECRET = process.env.JWT_SECRET ?? process.env.SESSION_SECRET ?? "dev-jwt-secret";
+const JWT_EXPIRY = "60d";
+
+// Generate a signed token for a user id — used as a cookie-independent
+// auth fallback for mobile Safari ITP.
+function signToken(userId: number): string {
+  return jwt.sign({ uid: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+}
+
+// Middleware: accept session cookie OR Bearer JWT token.
+// This means every API call works on mobile even when ITP strips cookies.
+function requireAuthFlex(req: any, res: any, next: any): void {
+  // Cookie path (desktop / normal browsers)
+  if (req.session?.userId) { next(); return; }
+  // Token path (mobile Safari, shared-link contexts)
+  const auth = req.headers.authorization;
+  if (auth?.startsWith("Bearer ")) {
+    try {
+      const payload = jwt.verify(auth.slice(7), JWT_SECRET) as { uid: number };
+      req.session.userId = payload.uid;
+      next(); return;
+    } catch { /* invalid token — fall through */ }
+  }
+  res.status(401).json({ error: "Sign in required." });
+}
+
 if (!process.env.SESSION_SECRET) {
   console.warn("SESSION_SECRET is not set — using an insecure default. Set one in .env before deploying.");
 }
@@ -104,20 +132,67 @@ app.get("/api/auth/google/check", (_req, res) => {
   res.json({ configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) });
 });
 
-app.post("/api/auth/signup", signup);
-app.post("/api/auth/login", login);
-app.post("/api/auth/logout", logout);
-app.get("/api/auth/me", me);
+app.post("/api/auth/signup", async (req, res) => {
+  try {
+    const { email, password, displayName } = req.body as any;
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !EMAIL_RE.test(email)) { res.status(400).json({ error: "Enter a valid email address." }); return; }
+    if (!password || password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters." }); return; }
+    const { db: _db } = await import("./db");
+    if (db.prepare("SELECT id FROM users WHERE email = ?").get(email)) { res.status(409).json({ error: "An account with that email already exists." }); return; }
+    const hash = await bcryptjs.hash(password, 10);
+    const name = (displayName ?? "").trim().slice(0, 60);
+    const info = db.prepare("INSERT INTO users (email, password_hash, display_name) VALUES (?, ?, ?)").run(email, hash, name);
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(info.lastInsertRowid) as any;
+    req.session.userId = user.id;
+    res.status(201).json({ user: publicUser(user), token: signToken(user.id) });
+  } catch (error) {
+    res.status(500).json({ error: "Signup failed." });
+  }
+});
+// Wrap login/signup to also return a JWT token
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body as { email?: string; password?: string };
+    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
+    if (!user || !user.password_hash || !(await bcryptjs.compare(password ?? "", user.password_hash))) {
+      res.status(401).json({ error: "Incorrect email or password." }); return;
+    }
+    req.session.userId = user.id;
+    res.json({ user: publicUser(user), token: signToken(user.id) });
+  } catch (error) {
+    res.status(500).json({ error: "Login failed." });
+  }
+});
+app.post("/api/auth/logout", (req, res) => { req.session.destroy(() => res.json({ success: true })); });
+app.get("/api/auth/me", (req, res) => {
+  // Try cookie first, then Bearer token
+  let userId = req.session?.userId;
+  if (!userId) {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) {
+      try {
+        const payload = jwt.verify(auth.slice(7), JWT_SECRET) as { uid: number };
+        userId = payload.uid;
+        req.session.userId = userId;
+      } catch {}
+    }
+  }
+  if (!userId) { res.status(401).json({ error: "Sign in required." }); return; }
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
+  if (!user) { res.status(401).json({ error: "Sign in required." }); return; }
+  res.json({ user: publicUser(user), token: signToken(userId) });
+});
 
 // Permanently deletes the user and all their data (CASCADE handles books,
 // chapters, concepts, progress, sessions, turns, reflections).
-app.delete("/api/auth/delete-account", requireAuth, (req, res) => {
+app.delete("/api/auth/delete-account", requireAuthFlex, (req, res) => {
   db.prepare("DELETE FROM users WHERE id = ?").run(req.session.userId);
   req.session.destroy(() => res.json({ deleted: true }));
 });
 
 // Update profile fields (name, email)
-app.patch("/api/auth/profile", requireAuth, express.json(), (req, res) => {
+app.patch("/api/auth/profile", requireAuthFlex, express.json(), (req, res) => {
   const { displayName, email } = req.body as { displayName?: string; email?: string };
   if (displayName !== undefined) {
     db.prepare("UPDATE users SET display_name = ? WHERE id = ?").run(displayName, req.session.userId);
@@ -136,7 +211,7 @@ app.patch("/api/auth/profile", requireAuth, express.json(), (req, res) => {
 
 // Upload profile picture (stored as base64 data URL in the DB for simplicity)
 const profilePicUpload = upload.single("profilePic");
-app.post("/api/auth/profile-pic", requireAuth, profilePicUpload, (req, res) => {
+app.post("/api/auth/profile-pic", requireAuthFlex, profilePicUpload, (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No image uploaded." });
     return;
@@ -146,7 +221,7 @@ app.post("/api/auth/profile-pic", requireAuth, profilePicUpload, (req, res) => {
   res.json({ profilePic: base64 });
 });
 
-app.get("/api/books", requireAuth, (req, res) => {
+app.get("/api/books", requireAuthFlex, (req, res) => {
   const ownBooks = db.prepare("SELECT * FROM books WHERE uploaded_by_user_id = ? ORDER BY created_at DESC").all(req.session.userId) as any[];
   const ownIds = new Set(ownBooks.map((b: any) => b.id));
   const libraryBooks = (db.prepare("SELECT * FROM books WHERE is_library_book = 1 AND status = 'ready' ORDER BY created_at ASC").all() as any[]).filter((b: any) => !ownIds.has(b.id));
@@ -169,7 +244,7 @@ app.get("/api/books", requireAuth, (req, res) => {
 // Delete a book and everything under it (chapters, concepts, topics, progress,
 // sessions - foreign keys cascade). Deliberately does NOT decrement
 // lifetime_uploads: the free allowance is spent on upload, not on possession.
-app.delete("/api/books/:bookId", requireAuth, (req, res) => {
+app.delete("/api/books/:bookId", requireAuthFlex, (req, res) => {
   const book = db.prepare("SELECT id, uploaded_by_user_id FROM books WHERE id = ?").get(Number(req.params.bookId)) as { id: number; uploaded_by_user_id: number } | undefined;
   if (!book || book.uploaded_by_user_id !== req.session.userId) {
     res.status(404).json({ error: "Book not found." });
@@ -181,7 +256,7 @@ app.delete("/api/books/:bookId", requireAuth, (req, res) => {
 
 // Dev-only: populates the real 31-chapter, 1,480-flashcard deck so the
 // engine can be exercised locally before the real upload pipeline exists.
-app.post("/api/dev/seed", requireAuth, (req, res) => {
+app.post("/api/dev/seed", requireAuthFlex, (req, res) => {
   const bookId = seedTestContent(req.session.userId!);
   res.json({ bookId });
 });
@@ -192,7 +267,7 @@ app.post("/api/dev/seed", requireAuth, (req, res) => {
 
 // Pre-flight: check if an extracted title looks like an existing book.
 // Client calls this after text extraction, before kicking off the job.
-app.post("/api/books/check-title", requireAuth, (req, res) => {
+app.post("/api/books/check-title", requireAuthFlex, (req, res) => {
   const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
   if (!title) { res.json({ match: null }); return; }
   const match = findMatchingBook(req.session.userId!, title);
@@ -200,7 +275,7 @@ app.post("/api/books/check-title", requireAuth, (req, res) => {
 });
 
 // After user confirms "add to existing book", patch the job's book_id.
-app.post("/api/jobs/:jobId/append-to/:bookId", requireAuth, (req, res) => {
+app.post("/api/jobs/:jobId/append-to/:bookId", requireAuthFlex, (req, res) => {
   const jobId = Number(req.params.jobId);
   const bookId = Number(req.params.bookId);
   const job = db.prepare("SELECT * FROM processing_jobs WHERE id = ? AND user_id = ?").get(jobId, req.session.userId) as any;
@@ -212,7 +287,7 @@ app.post("/api/jobs/:jobId/append-to/:bookId", requireAuth, (req, res) => {
   res.json({ ok: true, bookId });
 });
 
-app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req, res) => {
+app.post("/api/books/upload", requireAuthFlex, upload.array("file", 20), async (req, res) => {
   try {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     if (files.length === 0) {
@@ -302,18 +377,18 @@ app.post("/api/books/upload", requireAuth, upload.array("file", 20), async (req,
   }
 });
 
-app.get("/api/books/:bookId/status", requireAuth, (req, res) => {
+app.get("/api/books/:bookId/status", requireAuthFlex, (req, res) => {
   const status = getBookProcessingStatus(Number(req.params.bookId), req.session.userId!);
   if (!status) { res.status(404).json({ error: "Book not found." }); return; }
   res.json(status);
 });
 
 // ── Connections: cross-topic transfer challenges ──
-app.get("/api/books/:bookId/bridge/eligibility", requireAuth, (req, res) => {
+app.get("/api/books/:bookId/bridge/eligibility", requireAuthFlex, (req, res) => {
   res.json(bridgeEligibility(req.session.userId!, Number(req.params.bookId)));
 });
 
-app.post("/api/books/:bookId/bridge", requireAuth, async (req, res) => {
+app.post("/api/books/:bookId/bridge", requireAuthFlex, async (req, res) => {
   try {
     res.json(await startBridge(req.session.userId!, Number(req.params.bookId)));
   } catch (error) {
@@ -321,7 +396,7 @@ app.post("/api/books/:bookId/bridge", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/bridges/:bridgeId/respond", requireAuth, async (req, res) => {
+app.post("/api/bridges/:bridgeId/respond", requireAuthFlex, async (req, res) => {
   try {
     const answer = typeof req.body?.answerText === "string" ? req.body.answerText : "";
     if (!answer.trim()) { res.status(400).json({ error: "Write an answer first." }); return; }
@@ -332,7 +407,7 @@ app.post("/api/bridges/:bridgeId/respond", requireAuth, async (req, res) => {
 });
 
 // ── Argument protocol ──
-app.post("/api/topics/:topicId/argument/start", requireAuth, async (req, res) => {
+app.post("/api/topics/:topicId/argument/start", requireAuthFlex, async (req, res) => {
   try {
     res.json(await startArgumentSession(req.session.userId!, Number(req.params.topicId)));
   } catch (error) {
@@ -340,7 +415,7 @@ app.post("/api/topics/:topicId/argument/start", requireAuth, async (req, res) =>
   }
 });
 
-app.post("/api/argument/:sessionId/turns/:turnId/respond", requireAuth, async (req, res) => {
+app.post("/api/argument/:sessionId/turns/:turnId/respond", requireAuthFlex, async (req, res) => {
   try {
     const answer = typeof req.body?.answerText === "string" ? req.body.answerText : "";
     if (!answer.trim()) { res.status(400).json({ error: "Write an answer first." }); return; }
@@ -351,7 +426,7 @@ app.post("/api/argument/:sessionId/turns/:turnId/respond", requireAuth, async (r
 });
 
 // ── Audit protocol ──
-app.post("/api/topics/:topicId/audit/start", requireAuth, async (req, res) => {
+app.post("/api/topics/:topicId/audit/start", requireAuthFlex, async (req, res) => {
   try {
     res.json(await startAuditSession(req.session.userId!, Number(req.params.topicId)));
   } catch (error) {
@@ -359,7 +434,7 @@ app.post("/api/topics/:topicId/audit/start", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/audit/:sessionId/turns/:turnId/respond", requireAuth, async (req, res) => {
+app.post("/api/audit/:sessionId/turns/:turnId/respond", requireAuthFlex, async (req, res) => {
   try {
     const answer = typeof req.body?.answerText === "string" ? req.body.answerText : "";
     if (!answer.trim()) { res.status(400).json({ error: "Write an answer first." }); return; }
@@ -372,7 +447,7 @@ app.post("/api/audit/:sessionId/turns/:turnId/respond", requireAuth, async (req,
 // ── Topic-level progression status ──
 // Returns the learner's Bloom tier and which protocols are available for this topic.
 // The client uses this to show/hide Argument and Audit cards in the Session view.
-app.get("/api/topics/:topicId/progression", requireAuth, (req, res) => {
+app.get("/api/topics/:topicId/progression", requireAuthFlex, (req, res) => {
   const topicId = Number(req.params.topicId);
   const progress = db.prepare("SELECT bloom_tier, status FROM topic_progress WHERE user_id = ? AND topic_id = ?").get(req.session.userId, topicId) as any;
   const bloomTier: BloomTier = (progress?.bloom_tier ?? 1) as BloomTier;
@@ -396,7 +471,7 @@ app.get("/api/topics/:topicId/progression", requireAuth, (req, res) => {
 });
 
 // ── Admin: Liberation Library management ──
-app.post("/api/admin/books/:bookId/library", requireAuth, (req, res) => {
+app.post("/api/admin/books/:bookId/library", requireAuthFlex, (req, res) => {
   const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const me = db.prepare("SELECT email FROM users WHERE id = ?").get(req.session.userId) as any;
   if (!me || me.email.trim().toLowerCase() !== adminEmail) { res.status(403).json({ error: "Admin only." }); return; }
@@ -405,7 +480,7 @@ app.post("/api/admin/books/:bookId/library", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete("/api/admin/books/:bookId/library", requireAuth, (req, res) => {
+app.delete("/api/admin/books/:bookId/library", requireAuthFlex, (req, res) => {
   const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const me = db.prepare("SELECT email FROM users WHERE id = ?").get(req.session.userId) as any;
   if (!me || me.email.trim().toLowerCase() !== adminEmail) { res.status(403).json({ error: "Admin only." }); return; }
@@ -414,12 +489,12 @@ app.delete("/api/admin/books/:bookId/library", requireAuth, (req, res) => {
 });
 
 // ── Per-topic notes ──
-app.get("/api/topics/:topicId/note", requireAuth, (req, res) => {
+app.get("/api/topics/:topicId/note", requireAuthFlex, (req, res) => {
   const row = db.prepare("SELECT content, updated_at FROM notes WHERE user_id = ? AND topic_id = ?").get(req.session.userId, Number(req.params.topicId)) as { content: string; updated_at: string } | undefined;
   res.json({ content: row?.content ?? "", updatedAt: row?.updated_at ?? null });
 });
 
-app.put("/api/topics/:topicId/note", requireAuth, (req, res) => {
+app.put("/api/topics/:topicId/note", requireAuthFlex, (req, res) => {
   const content = typeof req.body?.content === "string" ? req.body.content : "";
   if (content.length > 50_000) { res.status(400).json({ error: "Note is too long." }); return; }
   const topic = db.prepare("SELECT id FROM topics WHERE id = ?").get(Number(req.params.topicId));
@@ -431,21 +506,21 @@ app.put("/api/topics/:topicId/note", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/books/:bookId/chapters", requireAuth, (req, res) => {
+app.get("/api/books/:bookId/chapters", requireAuthFlex, (req, res) => {
   const chapters = db.prepare("SELECT * FROM chapters WHERE book_id = ? ORDER BY order_index ASC").all(req.params.bookId);
   res.json({ chapters });
 });
 
 // The synthesized topics for a chapter - what Study Path and Session
 // actually work through. Empty until synthesize-topics has been run once.
-app.get("/api/chapters/:chapterId/topics", requireAuth, (req, res) => {
+app.get("/api/chapters/:chapterId/topics", requireAuthFlex, (req, res) => {
   const topics = getDueTopics(req.session.userId!, Number(req.params.chapterId));
   res.json({ topics });
 });
 
 // Triggers the AI synthesis call for a chapter - reads its raw flashcards,
 // surfaces the actual ideas the author is arguing. Idempotent unless force=true.
-app.post("/api/chapters/:chapterId/synthesize-topics", requireAuth, async (req, res) => {
+app.post("/api/chapters/:chapterId/synthesize-topics", requireAuthFlex, async (req, res) => {
   try {
     const force = Boolean((req.body as { force?: boolean } | undefined)?.force);
     const result = await synthesizeTopicsForChapter(Number(req.params.chapterId), force);
@@ -458,7 +533,7 @@ app.post("/api/chapters/:chapterId/synthesize-topics", requireAuth, async (req, 
 
 // The source flashcards that grounded a specific synthesized topic - so
 // a learner can review the raw material after struggling with a topic.
-app.get("/api/topics/:topicId/source-cards", requireAuth, (req, res) => {
+app.get("/api/topics/:topicId/source-cards", requireAuthFlex, (req, res) => {
   const cards = db
     .prepare(
       `SELECT c.id, c.label, c.source_locator, c.source_passage FROM concepts c
@@ -473,14 +548,14 @@ app.get("/api/topics/:topicId/source-cards", requireAuth, (req, res) => {
 // Flashcard Lab: pure browsing, no progress tracking, no AI. Deliberately
 // disconnected from topic_progress so it can never be used to "cheat"
 // mastery - the scheduler only updates from a real dialogue session.
-app.get("/api/chapters/:chapterId/flashcards", requireAuth, (req, res) => {
+app.get("/api/chapters/:chapterId/flashcards", requireAuthFlex, (req, res) => {
   const flashcards = db
     .prepare("SELECT id, label, question, source_locator, source_passage FROM concepts WHERE chapter_id = ? ORDER BY order_index ASC")
     .all(req.params.chapterId);
   res.json({ flashcards });
 });
 
-app.post("/api/topics/:topicId/sessions", requireAuth, async (req, res) => {
+app.post("/api/topics/:topicId/sessions", requireAuthFlex, async (req, res) => {
   try {
     const result = await startSession(req.session.userId!, Number(req.params.topicId));
     res.status(201).json(result);
@@ -491,7 +566,7 @@ app.post("/api/topics/:topicId/sessions", requireAuth, async (req, res) => {
 });
 
 // Check for an existing in-progress session on a topic and return its full state
-app.get("/api/topics/:topicId/active-session", requireAuth, (req, res) => {
+app.get("/api/topics/:topicId/active-session", requireAuthFlex, (req, res) => {
   const session = db.prepare(
     "SELECT * FROM dialogue_sessions WHERE user_id = ? AND topic_id = ? AND status = 'in_progress' ORDER BY started_at DESC LIMIT 1"
   ).get(req.session.userId, req.params.topicId) as { id: number; topic_id: number } | undefined;
@@ -509,13 +584,13 @@ app.get("/api/topics/:topicId/active-session", requireAuth, (req, res) => {
 });
 
 // Abandon an in-progress session so the user can start fresh
-app.post("/api/sessions/:sessionId/abandon", requireAuth, (req, res) => {
+app.post("/api/sessions/:sessionId/abandon", requireAuthFlex, (req, res) => {
   db.prepare("UPDATE dialogue_sessions SET status = 'incomplete', ended_at = datetime('now') WHERE id = ? AND user_id = ? AND status = 'in_progress'")
     .run(req.params.sessionId, req.session.userId);
   res.json({ abandoned: true });
 });
 
-app.post("/api/sessions/:sessionId/turns/:turnId/respond", requireAuth, async (req, res) => {
+app.post("/api/sessions/:sessionId/turns/:turnId/respond", requireAuthFlex, async (req, res) => {
   try {
     const { answerText, hintRequested } = req.body as { answerText?: string; hintRequested?: boolean };
     const result = await respondToTurn(req.session.userId!, Number(req.params.sessionId), Number(req.params.turnId), { answerText, hintRequested });
@@ -532,7 +607,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Stripe Checkout ──
-app.post("/api/billing/checkout", requireAuth, async (req, res) => {
+app.post("/api/billing/checkout", requireAuthFlex, async (req, res) => {
   if (!stripe || !process.env.STRIPE_PRICE_ID) {
     res.status(503).json({ error: "Payment processing is not configured yet. Add STRIPE_SECRET_KEY and STRIPE_PRICE_ID to your .env file." });
     return;
@@ -563,7 +638,7 @@ app.post("/api/billing/checkout", requireAuth, async (req, res) => {
 // Stripe Billing Portal — where a paying user manages their card, sees
 // invoices, or cancels. Requires the portal configuration to be saved once
 // in the Stripe dashboard (Settings → Billing → Customer portal).
-app.post("/api/billing/portal", requireAuth, async (req, res) => {
+app.post("/api/billing/portal", requireAuthFlex, async (req, res) => {
   if (!stripe) {
     res.status(503).json({ error: "Payment processing is not configured yet." });
     return;
