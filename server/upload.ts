@@ -2,17 +2,68 @@ import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
 import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
-import * as XLSX from "xlsx";
+import Anthropic from "@anthropic-ai/sdk";
 
 // ── Text extraction for every supported upload format ──
 // This module does NOT talk to the AI. It turns an uploaded file into plain
 // text (with chapter markers where the format gives us real boundaries) and
 // hands off to the chunked processing pipeline in processing.ts.
 
+const _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const SCANNED_THRESHOLD = 200; // chars — below this, treat as scanned/image PDF
+const MAX_VISION_PDF_MB = 32;  // Anthropic PDF vision limit
+
 export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
-  const result = await parser.getText();
-  return result.text;
+  // Step 1: try standard text extraction
+  try {
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    const result = await parser.getText();
+    const text = result.text?.trim() ?? "";
+    if (text.length >= SCANNED_THRESHOLD) return text;
+  } catch { /* fall through to vision */ }
+
+  // Step 2: scanned PDF — send to Anthropic vision (native PDF support)
+  // The API reads the PDF directly and transcribes all visible text.
+  if (buffer.length > MAX_VISION_PDF_MB * 1024 * 1024) {
+    throw new Error(
+      `This appears to be a scanned PDF and is too large (${Math.round(buffer.length / 1024 / 1024)}MB) for automatic text recognition. ` +
+      `Try uploading it in smaller sections, or take screenshots of the pages and upload those instead (up to 20 at a time).`
+    );
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY is not set — cannot transcribe scanned PDF.");
+  }
+
+  console.log(`Scanned PDF detected (${Math.round(buffer.length / 1024)}KB) — using Anthropic vision transcription`);
+  const base64 = buffer.toString("base64");
+
+  const message = await _anthropic.messages.create({
+    model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5",
+    max_tokens: 8000,
+    messages: [{
+      role: "user",
+      content: [
+        {
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: base64 },
+        } as any,
+        {
+          type: "text",
+          text: "Transcribe ALL the text in this PDF exactly as it appears, page by page, in reading order. Preserve paragraph breaks and headings. Skip page numbers and headers/footers. Output only the transcribed text, nothing else.",
+        },
+      ],
+    }],
+  });
+
+  const text = message.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n\n")
+    .trim();
+
+  if (!text) throw new Error("Could not extract any text from this scanned PDF. Try uploading screenshots of the pages instead.");
+  return text;
 }
 
 export async function extractTextFromDocx(buffer: Buffer): Promise<string> {
@@ -114,10 +165,12 @@ export async function extractUploadedFile(buffer: Buffer, mimetype: string, file
   throw new Error(`Unsupported file type (${mimetype}). Upload a PDF, EPUB, DOCX, or plain text file.`);
 }
 
-
 // ── Flashcard spreadsheet import (.xlsx / .csv) ──
 // A sheet of ready-made Q&A cards (from any tool) maps straight into the
-// concepts table - no AI call, no cost, instant.
+// concepts table - no AI call, no cost, instant. Header detection is
+// forgiving: question/front/prompt/term for the front, answer/back/
+// definition for the back, optional chapter/section/unit column for grouping.
+import * as XLSX from "xlsx";
 
 export interface ImportedFlashcards {
   title: string;
@@ -138,6 +191,8 @@ export function parseFlashcardSpreadsheet(buffer: Buffer, filename: string): Imp
   const chCol = findCol(/chapter|section|unit|lesson|topic|category/);
   let dataRows = rows.slice(1);
 
+  // No recognizable headers but two-plus columns: assume col A = question,
+  // col B = answer, and the first row is data, not a header.
   if (qCol === -1 || aCol === -1) {
     if ((rows[0]?.length ?? 0) >= 2) {
       qCol = 0;
