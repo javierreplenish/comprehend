@@ -149,7 +149,7 @@ async function structureChunk(chunkText: string, chunkIndex: number, chunksTotal
   const ask = async (correction?: string): Promise<ChunkResult | null> => {
     const message = await client.messages.create({
       model: MODEL,
-      max_tokens: 8000,
+      max_tokens: 12000,
       system: STRUCTURE_PROMPT,
       tools: [STRUCTURE_TOOL],
       tool_choice: { type: "tool", name: "submit_book_structure" },
@@ -162,10 +162,14 @@ async function structureChunk(chunkText: string, chunkIndex: number, chunksTotal
 
   let result = await ask();
   if (!result) {
-    console.warn(`Chunk ${chunkIndex + 1}/${chunksTotal}: malformed structure returned, retrying once with correction.`);
-    result = await ask("chapters was not a usable array of chapter objects.");
+    console.warn(`Chunk ${chunkIndex + 1}/${chunksTotal}: first attempt malformed, retrying with correction.`);
+    result = await ask('Your response did not contain a valid chapters array. You MUST call submit_book_structure with chapters as a JSON array. Even if the text is unclear or fragmented, extract at least one chapter with at least one concept from whatever text is present.');
   }
-  if (!result) throw new Error(`The processing engine returned a malformed structure for section ${chunkIndex + 1} of ${chunksTotal}, twice. Try uploading again.`);
+  if (!result) {
+    console.warn(`Chunk ${chunkIndex + 1}/${chunksTotal}: second attempt malformed, trying minimal extraction.`);
+    result = await ask('MINIMAL MODE: The text may be low quality or fragmented. Create ONE chapter called "Content" with at least one concept using whatever meaningful text you can find. You must return a valid chapters array no matter what.');
+  }
+  if (!result) throw new Error(`Could not extract structure from section ${chunkIndex + 1} of ${chunksTotal}. The text in this section may be too fragmented or unclear. Try uploading a different section.`);
   return result;
 }
 
