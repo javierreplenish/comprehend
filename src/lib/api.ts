@@ -66,10 +66,9 @@ export async function fetchNote(topicId: number): Promise<{ content: string; upd
 }
 
 export async function saveNote(topicId: number, content: string): Promise<void> {
-  const res = await fetch(`/api/topics/${topicId}/note`, {
+  const res = await authFetch(`/api/topics/${topicId}/note`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify({ content }),
   });
   await parseOrThrow(res);
@@ -134,9 +133,8 @@ export async function fetchTopics(chapterId: number): Promise<TopicSummary[]> {
 }
 
 export async function synthesizeTopics(chapterId: number, force = false): Promise<{ topicCount: number; skipped: boolean }> {
-  const res = await fetch(`/api/chapters/${chapterId}/synthesize-topics`, {
+  const res = await authFetch(`/api/chapters/${chapterId}/synthesize-topics`, {
     method: "POST",
-    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ force }),
   });
@@ -182,9 +180,8 @@ export async function abandonSession(sessionId: number): Promise<void> {
 }
 
 export async function respondToTurn(sessionId: number, turnId: number, input: { answerText?: string; hintRequested?: boolean }): Promise<RespondResult> {
-  const res = await fetch(`/api/sessions/${sessionId}/turns/${turnId}/respond`, {
+  const res = await authFetch(`/api/sessions/${sessionId}/turns/${turnId}/respond`, {
     method: "POST",
-    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
@@ -230,10 +227,9 @@ export async function startBridgeChallenge(bookId: number): Promise<BridgeStart>
 }
 
 export async function respondToBridgeChallenge(bridgeId: number, answerText: string): Promise<BridgeRespond> {
-  const res = await fetch(`/api/bridges/${bridgeId}/respond`, {
+  const res = await authFetch(`/api/bridges/${bridgeId}/respond`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify({ answerText }),
   });
   return parseOrThrow(res);
@@ -277,8 +273,8 @@ export async function startArgumentSession(topicId: number): Promise<ProtocolSes
 }
 
 export async function respondToArgumentTurn(sessionId: number, turnId: number, answerText: string): Promise<ProtocolRespond> {
-  const res = await fetch(`/api/argument/${sessionId}/turns/${turnId}/respond`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+  const res = await authFetch(`/api/argument/${sessionId}/turns/${turnId}/respond`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ answerText }),
   });
   return parseOrThrow(res);
@@ -290,16 +286,16 @@ export async function startAuditSession(topicId: number): Promise<ProtocolSessio
 }
 
 export async function respondToAuditTurn(sessionId: number, turnId: number, answerText: string): Promise<ProtocolRespond> {
-  const res = await fetch(`/api/audit/${sessionId}/turns/${turnId}/respond`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+  const res = await authFetch(`/api/audit/${sessionId}/turns/${turnId}/respond`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ answerText }),
   });
   return parseOrThrow(res);
 }
 
 export async function checkBookTitle(title: string): Promise<{ match: { id: number; title: string; similarity: number } | null }> {
-  const res = await fetch("/api/books/check-title", {
-    method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+  const res = await authFetch("/api/books/check-title", {
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
   });
   return parseOrThrow(res);
@@ -311,8 +307,8 @@ export async function appendJobToBook(jobId: number, bookId: number): Promise<{ 
 }
 
 export async function addToLibrary(bookId: number, collection = "black-liberation"): Promise<void> {
-  const res = await fetch(`/api/admin/books/${bookId}/library`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+  const res = await authFetch(`/api/admin/books/${bookId}/library`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ collection }),
   });
   await parseOrThrow(res);
