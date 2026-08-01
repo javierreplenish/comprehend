@@ -83,7 +83,15 @@ app.use(
     secret: process.env.SESSION_SECRET ?? "dev-only-insecure-secret",
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 60 * 60 * 24 * 30 },
+    rolling: true,
+    cookie: {
+      httpOnly: true,
+      // "none" + secure required for mobile Safari and cross-origin contexts.
+      // "lax" drops cookies on mobile in certain navigation patterns.
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 1000 * 60 * 60 * 24 * 60, // 60 days, rolling
+    },
   }),
 );
 
