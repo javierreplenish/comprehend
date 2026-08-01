@@ -1,4 +1,5 @@
 import type { Dimension } from "../types";
+import { authFetch } from "./auth";
 
 export interface BookSummary {
   id: number;
@@ -55,12 +56,12 @@ export interface BookProcessingStatus {
 }
 
 export async function fetchBookStatus(bookId: number): Promise<BookProcessingStatus> {
-  const res = await fetch(`/api/books/${bookId}/status`, { credentials: "include" });
+  const res = await authFetch(`/api/books/${bookId}/status`, {});
   return parseOrThrow(res);
 }
 
 export async function fetchNote(topicId: number): Promise<{ content: string; updatedAt: string | null }> {
-  const res = await fetch(`/api/topics/${topicId}/note`, { credentials: "include" });
+  const res = await authFetch(`/api/topics/${topicId}/note`, {});
   return parseOrThrow(res);
 }
 
@@ -98,36 +99,36 @@ async function parseOrThrow(res: Response) {
 }
 
 export async function fetchBooks(): Promise<{ books: BookSummary[]; uploadsUsed: number }> {
-  const res = await fetch("/api/books", { credentials: "include" });
+  const res = await authFetch("/api/books", {});
   const body = await parseOrThrow(res);
   return { books: body.books, uploadsUsed: body.uploadsUsed ?? body.books.length };
 }
 
 export async function deleteBook(bookId: number): Promise<void> {
-  const res = await fetch(`/api/books/${bookId}`, { method: "DELETE", credentials: "include" });
+  const res = await authFetch(`/api/books/${bookId}`, {method: "DELETE"});
   await parseOrThrow(res);
 }
 
 export async function seedSampleBook(): Promise<{ bookId: number }> {
-  const res = await fetch("/api/dev/seed", { method: "POST", credentials: "include" });
+  const res = await authFetch("/api/dev/seed", {method: "POST"});
   return parseOrThrow(res);
 }
 
 export async function uploadBook(files: File[]): Promise<UploadResult> {
   const formData = new FormData();
   for (const file of files) formData.append("file", file);
-  const res = await fetch("/api/books/upload", { method: "POST", credentials: "include", body: formData });
+  const res = await authFetch("/api/books/upload", {method: "POST",  body: formData});
   return parseOrThrow(res);
 }
 
 export async function fetchChapters(bookId: number): Promise<ChapterSummary[]> {
-  const res = await fetch(`/api/books/${bookId}/chapters`, { credentials: "include" });
+  const res = await authFetch(`/api/books/${bookId}/chapters`, {});
   const body = await parseOrThrow(res);
   return body.chapters;
 }
 
 export async function fetchTopics(chapterId: number): Promise<TopicSummary[]> {
-  const res = await fetch(`/api/chapters/${chapterId}/topics`, { credentials: "include" });
+  const res = await authFetch(`/api/chapters/${chapterId}/topics`, {});
   const body = await parseOrThrow(res);
   return body.topics;
 }
@@ -143,19 +144,19 @@ export async function synthesizeTopics(chapterId: number, force = false): Promis
 }
 
 export async function fetchFlashcards(chapterId: number): Promise<Flashcard[]> {
-  const res = await fetch(`/api/chapters/${chapterId}/flashcards`, { credentials: "include" });
+  const res = await authFetch(`/api/chapters/${chapterId}/flashcards`, {});
   const body = await parseOrThrow(res);
   return body.flashcards;
 }
 
 export async function fetchTopicSourceCards(topicId: number): Promise<Flashcard[]> {
-  const res = await fetch(`/api/topics/${topicId}/source-cards`, { credentials: "include" });
+  const res = await authFetch(`/api/topics/${topicId}/source-cards`, {});
   const body = await parseOrThrow(res);
   return body.flashcards;
 }
 
 export async function startSession(topicId: number): Promise<StartSessionResult> {
-  const res = await fetch(`/api/topics/${topicId}/sessions`, { method: "POST", credentials: "include" });
+  const res = await authFetch(`/api/topics/${topicId}/sessions`, {method: "POST"});
   return parseOrThrow(res);
 }
 
@@ -171,12 +172,12 @@ export interface ActiveSessionTurn {
 }
 
 export async function checkActiveSession(topicId: number): Promise<{ activeSession: { sessionId: number; turns: ActiveSessionTurn[] } | null }> {
-  const res = await fetch(`/api/topics/${topicId}/active-session`, { credentials: "include" });
+  const res = await authFetch(`/api/topics/${topicId}/active-session`, {});
   return parseOrThrow(res);
 }
 
 export async function abandonSession(sessionId: number): Promise<void> {
-  const res = await fetch(`/api/sessions/${sessionId}/abandon`, { method: "POST", credentials: "include" });
+  const res = await authFetch(`/api/sessions/${sessionId}/abandon`, {method: "POST"});
   await parseOrThrow(res);
 }
 
@@ -191,7 +192,7 @@ export async function respondToTurn(sessionId: number, turnId: number, input: { 
 }
 
 export async function createCheckoutSession(): Promise<{ url: string }> {
-  const res = await fetch("/api/billing/checkout", { method: "POST", credentials: "include" });
+  const res = await authFetch("/api/billing/checkout", {method: "POST"});
   return parseOrThrow(res);
 }
 
@@ -219,12 +220,12 @@ export type BridgeRespond =
   | { action: "incomplete"; supportiveText: string };
 
 export async function fetchBridgeEligibility(bookId: number): Promise<{ eligible: boolean }> {
-  const res = await fetch(`/api/books/${bookId}/bridge/eligibility`, { credentials: "include" });
+  const res = await authFetch(`/api/books/${bookId}/bridge/eligibility`, {});
   return parseOrThrow(res);
 }
 
 export async function startBridgeChallenge(bookId: number): Promise<BridgeStart> {
-  const res = await fetch(`/api/books/${bookId}/bridge`, { method: "POST", credentials: "include" });
+  const res = await authFetch(`/api/books/${bookId}/bridge`, {method: "POST"});
   return parseOrThrow(res);
 }
 
@@ -266,12 +267,12 @@ export type ProtocolRespond =
   | { action: "continue"; turnId: number; stage: string; questionText: string; introText: string | null };
 
 export async function fetchTopicProgression(topicId: number): Promise<TopicProgression> {
-  const res = await fetch(`/api/topics/${topicId}/progression`, { credentials: "include" });
+  const res = await authFetch(`/api/topics/${topicId}/progression`, {});
   return parseOrThrow(res);
 }
 
 export async function startArgumentSession(topicId: number): Promise<ProtocolSession> {
-  const res = await fetch(`/api/topics/${topicId}/argument/start`, { method: "POST", credentials: "include" });
+  const res = await authFetch(`/api/topics/${topicId}/argument/start`, {method: "POST"});
   return parseOrThrow(res);
 }
 
@@ -284,7 +285,7 @@ export async function respondToArgumentTurn(sessionId: number, turnId: number, a
 }
 
 export async function startAuditSession(topicId: number): Promise<ProtocolSession> {
-  const res = await fetch(`/api/topics/${topicId}/audit/start`, { method: "POST", credentials: "include" });
+  const res = await authFetch(`/api/topics/${topicId}/audit/start`, {method: "POST"});
   return parseOrThrow(res);
 }
 
@@ -305,7 +306,7 @@ export async function checkBookTitle(title: string): Promise<{ match: { id: numb
 }
 
 export async function appendJobToBook(jobId: number, bookId: number): Promise<{ bookId: number }> {
-  const res = await fetch(`/api/jobs/${jobId}/append-to/${bookId}`, { method: "POST", credentials: "include" });
+  const res = await authFetch(`/api/jobs/${jobId}/append-to/${bookId}`, {method: "POST"});
   return parseOrThrow(res);
 }
 
@@ -318,16 +319,16 @@ export async function addToLibrary(bookId: number, collection = "black-liberatio
 }
 
 export async function removeFromLibrary(bookId: number): Promise<void> {
-  const res = await fetch(`/api/admin/books/${bookId}/library`, { method: "DELETE", credentials: "include" });
+  const res = await authFetch(`/api/admin/books/${bookId}/library`, {method: "DELETE"});
   await parseOrThrow(res);
 }
 
 export async function createBillingPortalSession(): Promise<{ url: string }> {
-  const res = await fetch("/api/billing/portal", { method: "POST", credentials: "include" });
+  const res = await authFetch("/api/billing/portal", {method: "POST"});
   return parseOrThrow(res);
 }
 
 export async function fetchAdminStats(): Promise<AdminStats> {
-  const res = await fetch("/api/admin/stats", { credentials: "include" });
+  const res = await authFetch("/api/admin/stats", {});
   return parseOrThrow(res);
 }
