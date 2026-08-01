@@ -89,7 +89,7 @@ app.use(
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 250 * 1024 * 1024 } });
 
 app.post("/api/auth/signup", signup);
 app.post("/api/auth/login", login);
