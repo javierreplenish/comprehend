@@ -99,6 +99,11 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 250 * 1024 * 1024 } });
 
+// Quick check so the client can show a friendly message if Google OAuth isn't configured
+app.get("/api/auth/google/check", (_req, res) => {
+  res.json({ configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) });
+});
+
 app.post("/api/auth/signup", signup);
 app.post("/api/auth/login", login);
 app.post("/api/auth/logout", logout);
