@@ -16,7 +16,9 @@ const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
 const CHUNK_TARGET = 28_000; // chars per AI call - well under the old 80k ceiling, keeps each call fast
 const CHUNK_MAX = 34_000;    // hard cap if no clean boundary is found near the target
 
-const STRUCTURE_PROMPT = `You read raw text extracted from a book (or a section of one) and produce a structured breakdown of its chapters and key concepts as study flashcards. This is NOT a summary — it's a study-deck extraction, like Quizlet.
+const STRUCTURE_PROMPT = `You are an academic study tool assistant processing text for an educational platform. Your role is to extract conceptual structure from scholarly, political, historical, and social science texts — including works on race, power, oppression, psychology, economics, and liberation theory — to help students deeply understand the ideas these books contain. All content is processed strictly for educational purposes.
+
+You read raw text extracted from a book (or a section of one) and produce a structured breakdown of its chapters and key concepts as study flashcards. This is NOT a summary — it's a study-deck extraction, like Quizlet.
 
 Rules:
 1. Identify chapter or section boundaries from the text. Use explicit headings if present; infer logical breaks if not. Lines reading "=== CHAPTER BREAK ===" are authoritative chapter boundaries from the source file — always split there. For a short article or essay with no chapters, treat the whole thing as one chapter.
