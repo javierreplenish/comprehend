@@ -147,14 +147,26 @@ async function structureChunk(chunkText: string, chunkIndex: number, chunksTotal
         : "");
 
   const ask = async (correction?: string): Promise<ChunkResult | null> => {
-    const message = await client.messages.create({
-      model: MODEL,
-      max_tokens: 12000,
-      system: STRUCTURE_PROMPT,
-      tools: [STRUCTURE_TOOL],
-      tool_choice: { type: "tool", name: "submit_book_structure" },
-      messages: [{ role: "user", content: `${contextNote} Read it and extract the chapter structure and key concepts:\n\n${chunkText}${correction ? `\n\nCORRECTION - your previous response was malformed: ${correction} Return chapters as a JSON ARRAY of objects, each with a title string and a concepts array.` : ""}` }],
-    });
+    let message;
+    try {
+      message = await client.messages.create({
+        model: MODEL,
+        max_tokens: 12000,
+        system: STRUCTURE_PROMPT,
+        tools: [STRUCTURE_TOOL],
+        tool_choice: { type: "tool", name: "submit_book_structure" },
+        messages: [{ role: "user", content: `${contextNote} Read it and extract the chapter structure and key concepts:\n\n${chunkText}${correction ? `\n\nCORRECTION - your previous response was malformed: ${correction} Return chapters as a JSON ARRAY of objects, each with a title string and a concepts array.` : ""}` }],
+      });
+    } catch (err: any) {
+      // Anthropic content filtering or rate limit — log and return null so retry logic handles it
+      const msg = err?.message ?? String(err);
+      if (msg.includes("content filtering") || msg.includes("invalid_request_error") || msg.includes("Output blocked")) {
+        console.warn(`Chunk ${chunkIndex + 1}/${chunksTotal}: content filtered by Anthropic — skipping section.`);
+        // Return a minimal valid structure so processing continues
+        return { title: "Unknown", author: null, chapters: [{ title: "Content", concepts: [{ label: "Filtered section", question: "What is the main idea of this section?", sourcePassage: "This section could not be processed due to content filtering.", sourceLocator: "" }] }] };
+      }
+      throw err;
+    }
     const toolUse = message.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
     if (!toolUse) return null;
     return normalizeChunkResult(toolUse.input);
